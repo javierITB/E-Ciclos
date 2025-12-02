@@ -13,6 +13,10 @@ import plotly.graph_objects as go
 from typing import List, Optional
 import routing
 from grafo import Grafo
+# --- NUEVA IMPORTACIÓN ---
+from string_to_node import texto_a_nodo  # Asegúrate de que string_to_node.py esté en el mismo directorio
+
+# -------------------------
 
 # --- CONFIGURACIÓN Y CARGA DE DATOS ---
 OSM_FILE = "./map_clean.osm"
@@ -128,16 +132,29 @@ else:
                          children="Modo Click: Seleccionar Origen"),
                 # -----------------------------------
 
-                dbc.Label("📍 Origen (ID de Nodo):", className="mt-3 form-label"),
-                dbc.Input(id='input-origen', type='number', placeholder='Ej: 139158914', className="mb-2"),
+                # --- ALMACENES DE VALOR (OCULTOS) ---
+                # Usaremos estos dcc.Store para guardar los IDs de nodo numéricos
+                dcc.Store(id='store-origen-id', data=None),
+                dcc.Store(id='store-destino-id', data=None),
+                # ------------------------------------
+
+                dbc.Label("📍 Origen (Texto o ID de Nodo):", className="mt-3 form-label"),
+                # CAMBIO: type='text' para permitir la entrada de nombres de lugares
+                dbc.Input(id='input-origen', type='text', placeholder='Ej: Plaza de Armas o 139158914',
+                          className="mb-2"),
                 dbc.Button('Fijar Origen', id='btn-fijar-origen', n_clicks=0, color="info", size="sm",
                            className="w-100"),
-                dbc.Label("🏁 Destino (ID de Nodo):", className="mt-4 form-label"),
-                dbc.Input(id='input-destino', type='number', placeholder='Ej: 139162483', className="mb-2"),
+
+                dbc.Label("🏁 Destino (Texto o ID de Nodo):", className="mt-4 form-label"),
+                # CAMBIO: type='text' para permitir la entrada de nombres de lugares
+                dbc.Input(id='input-destino', type='text', placeholder='Ej: Cerro San Cristóbal o 139162483',
+                          className="mb-2"),
                 dbc.Button('Fijar Destino', id='btn-fijar-destino', n_clicks=0, color="danger", size="sm",
                            className="w-100"),
+
+                # CAMBIO: El mensaje de estado ahora es más genérico
                 dbc.Alert(id="selection-status", color="light", className="text-center mt-3 py-2",
-                          children="Fija Origen y Destino usando sus IDs."),
+                          children="Fija Origen y Destino usando texto o IDs."),
                 html.Hr(className="my-4"),
                 dbc.Button('🛣️ Calcular Ruta Óptima', id='btn-ruta', n_clicks=0, color="success",
                            className="w-100 mt-2 btn-lg"),
@@ -234,10 +251,11 @@ def update_click_mode_label(mode_data):
 
 
 # Callback de Click en el Mapa: Lee el clic, encuentra el nodo y actualiza los inputs
+# CAMBIO: Ahora actualiza los STORES de ID, no los inputs de texto.
 @app.callback(
     [
-        Output('input-origen', 'value', allow_duplicate=True),
-        Output('input-destino', 'value', allow_duplicate=True),
+        Output('store-origen-id', 'data', allow_duplicate=True),
+        Output('store-destino-id', 'data', allow_duplicate=True),
         Output('store-click-mode', 'data', allow_duplicate=True)
     ],
     Input('mapa-2d-interactivo', 'clickData'),
@@ -264,7 +282,7 @@ def handle_map_click(clickData, mode_data):
     if node_id is None:
         return no_update, no_update, no_update
 
-    node_id_str = str(node_id)
+    node_id_int = int(node_id)  # Se almacena como INT para consistencia
 
     # 3. Determinar qué campo actualizar y alternar el modo
     current_mode = mode_data['next_selection']
@@ -272,14 +290,139 @@ def handle_map_click(clickData, mode_data):
     if current_mode == 'ORIGEN':
         # Actualizar Origen y cambiar el modo a DESTINO
         new_mode_data = {'next_selection': 'DESTINO'}
-        return node_id_str, no_update, new_mode_data
+        return node_id_int, no_update, new_mode_data
 
     elif current_mode == 'DESTINO':
         # Actualizar Destino y cambiar el modo a ORIGEN
         new_mode_data = {'next_selection': 'ORIGEN'}
-        return no_update, node_id_str, new_mode_data
+        return no_update, node_id_int, new_mode_data
 
     return no_update, no_update, no_update
+
+
+
+# --- Callback de Manejo de Texto: Convierte texto a ID y actualiza Stores ---
+@app.callback(
+    [Output('store-origen-id', 'data', allow_duplicate=True),
+     Output('store-destino-id', 'data', allow_duplicate=True),
+     Output('selection-status', 'children', allow_duplicate=True)],
+    # Se permite que este callback también actualice el estado
+    [Input('btn-fijar-origen', 'n_clicks'),
+     Input('btn-fijar-destino', 'n_clicks'),
+     Input('btn-reset', 'n_clicks')],
+    [State('input-origen', 'value'),
+     State('input-destino', 'value'),
+     State('store-origen-id', 'data'),
+     State('store-destino-id', 'data')],
+    prevent_initial_call=True
+)
+def handle_text_input(n_origen, n_destino, n_reset,
+                      origen_text, destino_text,
+                      current_origen_id, current_destino_id):
+    global PUNTO_ORIGEN, PUNTO_DESTINO, RUTA_DIJKSTRA, RUTA_ASTAR
+
+    ctx = dash.callback_context
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else 'initial_load'
+
+    # 1. Lógica de Reseteo
+    if trigger_id == 'btn-reset':
+        # (La limpieza de globales se mantiene aquí por si acaso, aunque el Callback 2 también lo hace)
+        RUTA_DIJKSTRA = None
+        RUTA_ASTAR = None
+        # Devuelve None para los stores, y el estado inicial
+        return None, None, html.Div(["👆 Fija Origen y Destino usando texto o IDs."], className="fw-bold")
+
+    # Inicializar las salidas
+    new_origen_id = current_origen_id
+    new_destino_id = current_destino_id
+    status_msg = no_update
+
+    # 2. Manejo de Origen
+    if trigger_id == 'btn-fijar-origen':
+        # Si el campo de texto está vacío, limpiamos el origen
+        if not origen_text:
+            new_origen_id = None
+            status_msg = no_update  # Se actualizará con el callback de estado general
+        else:
+            try:
+                # Intentar buscar el nodo (Nota: texto_a_nodo en tu string_to_node.py solo necesita el texto)
+                node_id = texto_a_nodo(
+                    origen_text)  # Asumimos que G no es necesario si usa 'map_clean.osm' internamente.
+
+                # Validar si el texto introducido es el ID de un nodo válido (alternativa)
+                if node_id == -1:
+                    try:
+                        potential_id = int(origen_text)
+                        if potential_id in G:
+                            node_id = potential_id
+                    except ValueError:
+                        pass  # No es un ID numérico, seguimos con -1
+
+                if node_id != -1 and node_id in G:
+                    new_origen_id = int(node_id)
+                    # Limpiamos las rutas
+                    RUTA_DIJKSTRA = None
+                    RUTA_ASTAR = None
+                    status_msg = no_update  # Se actualizará con el callback de estado general
+                else:
+                    new_origen_id = None  # Limpia el store si hay error
+                    status_msg = html.Div([f"⛔ Error: Origen '{origen_text}' no encontrado o inválido."],
+                                          className="text-danger")
+
+            except Exception as e:
+                new_origen_id = None
+                # ***ESTE MENSAJE PERSISTIRÁ porque este callback es el que lo genera***
+                status_msg = html.Div([f"⛔ Error en la búsqueda de Origen: {e}"], className="text-danger")
+
+
+    # 3. Manejo de Destino
+    elif trigger_id == 'btn-fijar-destino':
+        if not destino_text:
+            new_destino_id = None
+            status_msg = no_update  # Se actualizará con el callback de estado general
+        else:
+            try:
+                node_id = texto_a_nodo(
+                    destino_text)  # Asumimos que G no es necesario si usa 'map_clean.osm' internamente.
+
+                # Validar si el texto introducido es el ID de un nodo válido (alternativa)
+                if node_id == -1:
+                    try:
+                        potential_id = int(destino_text)
+                        if potential_id in G:
+                            node_id = potential_id
+                    except ValueError:
+                        pass  # No es un ID numérico, seguimos con -1
+
+                # Validación adicional: Destino no puede ser igual a Origen
+                is_valid = node_id != -1 and node_id in G and int(node_id) != current_origen_id
+
+                if is_valid:
+                    new_destino_id = int(node_id)
+
+                    # Limpiamos las rutas
+                    RUTA_DIJKSTRA = None
+                    RUTA_ASTAR = None
+                    status_msg = no_update  # Se actualizará con el callback de estado general
+                else:
+                    new_destino_id = None
+                    if node_id != -1 and int(node_id) == current_origen_id:
+                        status_msg = html.Div(["⛔ Error: Destino no puede ser igual al Origen."],
+                                              className="text-danger")
+                    else:
+                        status_msg = html.Div([f"⛔ Error: Destino '{destino_text}' no encontrado o inválido."],
+                                              className="text-danger")
+
+            except Exception as e:
+                new_destino_id = None
+                # ***ESTE MENSAJE PERSISTIRÁ porque este callback es el que lo genera***
+                status_msg = html.Div([f"⛔ Error en la búsqueda de Destino: {e}"], className="text-danger")
+
+    # Si se actualizó un store (es decir, new_origen_id/new_destino_id cambió y no hay mensaje de error),
+    # el callback 3 se encargará del mensaje final.
+    return new_origen_id, new_destino_id, status_msg
+
+# --- FIN NUEVO CALLBACK ---
 
 
 # Callback 1: Toggle (Mostrar/Ocultar) la vista 3D
@@ -298,18 +441,15 @@ def toggle_collapse(n_clicks, is_open):
 @app.callback(
     Output('mapa-2d-interactivo', 'figure'),
     [Input('btn-reset', 'n_clicks'),
-     Input('btn-fijar-origen', 'n_clicks'),
-     Input('btn-fijar-destino', 'n_clicks'),
      Input('ruta-output', 'children'),
-     # AGREGAMOS LOS INPUTS DE VALOR COMO INPUTS TAMBIÉN para forzar el redibujo
-     # El cambio en estas entradas (por click o manual) dispara el dibujo.
-     Input('input-origen', 'value'),
-     Input('input-destino', 'value')],
+     # CAMBIO: Usamos los valores de los STORES para disparar el redibujo
+     Input('store-origen-id', 'data'),
+     Input('store-destino-id', 'data')],
     [State('mapa-2d-interactivo', 'figure')]
 )
-def update_map_and_selection(reset_clicks, origen_clicks, destino_clicks,
+def update_map_and_selection(reset_clicks,
                              ruta_output_children,
-                             origen_id, destino_id,  # Los Input de valor
+                             origen_id, destino_id,  # Los valores de los STORES
                              current_figure):
     global PUNTO_ORIGEN, PUNTO_DESTINO, RUTA_DIJKSTRA, RUTA_ASTAR, G, nodes_df, edges_lines
 
@@ -322,43 +462,15 @@ def update_map_and_selection(reset_clicks, origen_clicks, destino_clicks,
         PUNTO_DESTINO = None
         RUTA_DIJKSTRA = None
         RUTA_ASTAR = None
+        # Ya no hace falta anular aquí, pues lo hace el callback de texto.
 
-    # --- LÓGICA DE ASIGNACIÓN DE PUNTO (Activado por Click en Mapa o entrada Manual) ---
+    # --- LÓGICA DE ASIGNACIÓN DE PUNTO (Activado por Store) ---
+    # Lo más importante es que las variables globales se actualicen
+    # con los valores que vienen de los STORES.
+    # El store de Origen y Destino solo se actualiza si el valor es un ID VÁLIDO o None.
 
-    # Intenta asignar Origen si el input-origen cambió o se pulsó el botón
-    if origen_id is not None:
-        try:
-            node_id = int(origen_id)
-            if node_id in G:
-                # Si el ID es válido, asignamos el PUNTO_ORIGEN.
-                # Esto cubre el clic en el mapa y la entrada manual.
-                PUNTO_ORIGEN = node_id
-            else:
-                # Si el ID no existe en el grafo, limpiamos la variable global
-                PUNTO_ORIGEN = None
-        except ValueError:
-            PUNTO_ORIGEN = None
-    elif origen_id is None:
-        PUNTO_ORIGEN = None
-
-    # Intenta asignar Destino si el input-destino cambió o se pulsó el botón
-    if destino_id is not None:
-        try:
-            node_id = int(destino_id)
-            is_valid_dest = node_id in G and (PUNTO_ORIGEN is None or node_id != PUNTO_ORIGEN)
-            if is_valid_dest:
-                PUNTO_DESTINO = node_id
-            else:
-                PUNTO_DESTINO = None
-        except ValueError:
-            PUNTO_DESTINO = None
-    elif destino_id is None:
-        PUNTO_DESTINO = None
-
-    # Si se pulsa el botón de Origen/Destino, anulamos la ruta actual
-    if trigger_id in ['btn-fijar-origen', 'btn-fijar-destino']:
-        RUTA_DIJKSTRA = None
-        RUTA_ASTAR = None
+    PUNTO_ORIGEN = origen_id if origen_id is not None and origen_id in G else None
+    PUNTO_DESTINO = destino_id if destino_id is not None and destino_id in G else None
 
     # --- FIN LÓGICA DE ASIGNACIÓN ---
 
@@ -391,22 +503,21 @@ def update_map_and_selection(reset_clicks, origen_clicks, destino_clicks,
         # uirevision por defecto (mantiene la vista)
         uirevision=str(PUNTO_ORIGEN) + str(PUNTO_DESTINO) + str(bool(RUTA_DIJKSTRA)) + str(bool(RUTA_ASTAR)),
 
-        title="Mapa de Calles de Santiago (Selección por ID)",
+        title="Mapa de Calles de Santiago (Selección por ID/Texto)",
     )
 
-    # 5.1. Lógica para centrar en el punto recién fijado (SOLO SI SE PULSA BOTÓN O RESET)
+    # 5.1. Lógica para centrar en el punto recién fijado (SOLO SI SE FIJÓ UN PUNTO)
     target_node_id = None
 
-    # Centrar SOLO si se pulsó el botón (evita movimiento al teclear)
-    if trigger_id == 'btn-fijar-origen' and PUNTO_ORIGEN is not None:
-        target_node_id = PUNTO_ORIGEN
-    elif trigger_id == 'btn-fijar-destino' and PUNTO_DESTINO is not None:
-        target_node_id = PUNTO_DESTINO
-    # Si se actualizó por clic en el mapa, y no había marca previa, también centramos
-    elif trigger_id == 'input-origen' and PUNTO_ORIGEN is not None and current_figure is None:
-        target_node_id = PUNTO_ORIGEN
-    elif trigger_id == 'input-destino' and PUNTO_DESTINO is not None and current_figure is None:
-        target_node_id = PUNTO_DESTINO
+    # Si el trigger vino del callback que actualiza los stores (por click o por botón)
+    if trigger_id in ['store-origen-id', 'store-destino-id'] and (PUNTO_ORIGEN or PUNTO_DESTINO):
+
+        # Si el origen se acaba de fijar (o cambió) y no es nulo
+        if trigger_id == 'store-origen-id' and PUNTO_ORIGEN is not None:
+            target_node_id = PUNTO_ORIGEN
+        # Si el destino se acaba de fijar (o cambió) y no es nulo
+        elif trigger_id == 'store-destino-id' and PUNTO_DESTINO is not None:
+            target_node_id = PUNTO_DESTINO
 
     if target_node_id and target_node_id in G:
         # Centrar en el punto recién fijado y hacer zoom (nivel 16 es a nivel de calle)
@@ -549,59 +660,41 @@ def update_map_and_selection(reset_clicks, origen_clicks, destino_clicks,
     return fig
 
 
-# Callback 3: Actualizar el estado de la selección (SE MANTIENE IGUAL)
+# Callback 3: Actualizar el estado de la selección (ACTUALIZADO para solo manejar estados OK)
 @app.callback(
-    Output("selection-status", "children"),
-    [Input('btn-reset', 'n_clicks'),
-     Input('btn-fijar-origen', 'n_clicks'),
-     Input('btn-fijar-destino', 'n_clicks')],
-    [State('input-origen', 'value'),
-     State('input-destino', 'value')]
+    Output("selection-status", "children", allow_duplicate=True),
+    [Input('store-origen-id', 'data'),
+     Input('store-destino-id', 'data')],
+    # Se eliminó el 'btn-reset' de Input, ya que el callback de texto lo maneja.
+    prevent_initial_call=True
 )
-def update_status_text(reset_clicks, origen_clicks, destino_clicks, origen_id, destino_id):
-    global PUNTO_ORIGEN, PUNTO_DESTINO, G
-
+def update_status_text_from_store(origen_id, destino_id):
     ctx = dash.callback_context
-    if not ctx.triggered:
-        pass
-    else:
-        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    # Si el trigger fue de un store que se acaba de limpiar (poner en None),
+    # significa que hubo un error que el callback de texto ya reportó.
+    # Evitamos sobrescribir ese error.
 
-        # 1. Validación de ID
-        if trigger_id == 'btn-fijar-origen' and origen_id is not None:
-            try:
-                node_id = int(origen_id)
-                if node_id not in G:
-                    return html.Div([f"⛔ Error: ID de Origen '{origen_id}' no encontrado."], className="text-danger")
-            except ValueError:
-                return html.Div(["⛔ Error: ID de Origen debe ser un número entero."], className="text-danger")
+    # Si origen_id y destino_id son None (después de un reset o un error de texto en ambos)
+    if origen_id is None and destino_id is None:
+        return html.Div(["👆 Fija Origen y Destino usando texto o IDs."], className="fw-bold")
 
-        elif trigger_id == 'btn-fijar-destino' and destino_id is not None:
-            try:
-                node_id = int(destino_id)
-                if node_id not in G:
-                    return html.Div([f"⛔ Error: ID de Destino '{destino_id}' no encontrado."], className="text-danger")
-                if PUNTO_ORIGEN is not None and node_id == PUNTO_ORIGEN:
-                    return html.Div(["⛔ Error: Destino no puede ser igual al Origen."], className="text-danger")
-            except ValueError:
-                return html.Div(["⛔ Error: ID de Destino debe ser un número entero."], className="text-danger")
-
-    # 2. Lógica de visualización de estado
-    if PUNTO_ORIGEN is None and PUNTO_DESTINO is None:
-        return html.Div(["👆 Fija Origen y Destino usando sus IDs."], className="fw-bold")
-    elif PUNTO_ORIGEN is not None and PUNTO_DESTINO is None:
+    # Si solo origen está fijo
+    elif origen_id is not None and destino_id is None:
         return html.Div([
-            html.B("✅ Origen: "),
-            html.Span(f"{PUNTO_ORIGEN}. Ahora selecciona el Destino (ID).")
+            html.B("✅ Origen Fijado. "),
+            html.Span(f"ID: {origen_id}. Ahora selecciona el Destino.")
         ])
-    elif PUNTO_ORIGEN is not None and PUNTO_DESTINO is not None:
+
+    # Si ambos están fijos
+    elif origen_id is not None and destino_id is not None:
         return html.Div([
             html.B("🎉 Listo: "),
-            html.Span(f"Origen ({PUNTO_ORIGEN}) y Destino ({PUNTO_DESTINO}). ¡Calcula la ruta!")
+            html.Span(f"Origen ({origen_id}) y Destino ({destino_id}). ¡Calcula la ruta!")
         ], className="text-success fw-bold")
-    else:
-        return html.Div(["Fija Origen y Destino usando sus IDs."], className="fw-bold")
 
+    # Si solo destino está fijo (caso poco probable pero cubierto)
+    else:
+        return html.Div(["Fija Origen y Destino usando texto o IDs."], className="fw-bold")
 
 # Callback 4: Generar la figura 3D (SE MANTIENE IGUAL)
 @app.callback(
@@ -656,10 +749,17 @@ def update_3d_figure(n_clicks):
     [Output('ruta-output', 'children'),
      Output('ruta-nodos-list', 'children')],
     [Input('btn-ruta', 'n_clicks')],
+    # CAMBIO: Usamos los STORES para obtener el Origen/Destino final
+    [State('store-origen-id', 'data'),
+     State('store-destino-id', 'data')],
     prevent_initial_call=True
 )
-def calcular_rutas(n_clicks):
+def calcular_rutas(n_clicks, origen_id, destino_id):
     global RUTA_DIJKSTRA, RUTA_ASTAR, PUNTO_ORIGEN, PUNTO_DESTINO
+
+    # Importante: Actualizamos las globales de ruteo con los datos de los stores
+    PUNTO_ORIGEN = origen_id
+    PUNTO_DESTINO = destino_id
 
     if G_CUSTOM is None or PUNTO_ORIGEN is None or PUNTO_DESTINO is None:
         return dbc.Alert("Seleccione Origen y Destino válidos antes de calcular.", color="danger"), None
