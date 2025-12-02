@@ -141,7 +141,7 @@ def texto_a_nodo(texto, archivo_osm="map_clean.osm"):
 
 # === EJEMPLOS ===
 # 1) Intersección:
-print(texto_a_nodo("ejército 333"))
+print(texto_a_nodo("Gorbea, Vergara"))
 
 # 2) Dirección normal:
 # print(texto_a_nodo("cenco ñuñoa"))
