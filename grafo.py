@@ -26,7 +26,11 @@ class Grafo:
         return self.caminos[id_camino]
 
     def cargar_desde_networkx(self, G_nx: nx.MultiDiGraph):
-        """Inicializa el grafo a partir de un grafo NetworkX de OSMnx."""
+        """Inicializa el grafo a partir de un grafo NetworkX de OSMnx.
+        
+        NOTA: Crea caminos bidireccionales. Para cada arista (u, v) se crean
+        dos caminos: u→v y v→u.
+        """
         self.nodos.clear()
         self.caminos.clear()
 
@@ -44,23 +48,31 @@ class Grafo:
                 prob_acc=prob_acc
             )
 
-        # 2. Crear Caminos (Aristas) y establecer conexiones
+        # 2. Crear Caminos (Aristas) BIDIRECCIONALES y establecer conexiones
         edge_id = 0
         for u, v, k, data in G_nx.edges(keys=True, data=True):
-            edge_id += 1
-
             # La importancia se puede simular o extraer de datos OSM si existen
             # Aquí usamos el largo de la arista (length) como una proxy simple para 'importancia'
             # (aunque el módulo routing.py espera un int, lo forzamos a 1 para simplicidad si no existe)
             importancia = int(data.get('length', 1) / 100) + 1
 
-            # Usar el método existente para agregar camino.
-            # La llamada a Camino.__init__ se encarga de enlazar los caminos a los nodos.
+            # Crear camino en dirección u → v
+            edge_id += 1
             self.agregar_camino(
                 id_camino=edge_id,
                 id_nodo_a=u,
                 id_nodo_b=v,
                 ciclovia=False,  # Este dato no está en el OSMnx base, se asume False
+                importancia=importancia
+            )
+
+            # Crear camino en dirección v → u (BIDIRECCIONAL)
+            edge_id += 1
+            self.agregar_camino(
+                id_camino=edge_id,
+                id_nodo_a=v,
+                id_nodo_b=u,
+                ciclovia=False,
                 importancia=importancia
             )
 

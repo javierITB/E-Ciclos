@@ -127,7 +127,10 @@ def texto_a_nodo(texto, archivo_osm="map_clean.osm"):
     # --- Intersección ---
     if "," in texto:
         c1, c2 = [s.strip() for s in texto.split(",", 1)]
-        return buscar_interseccion(c1, c2, nodos, ways)
+        nodo_encontrado = buscar_interseccion(c1, c2, nodos, ways)
+
+        print("Nodo encontrado: " + str(nodo_encontrado))
+        return nodo_encontrado
 
     # --- Dirección normal ---
     coord = obtener_coordenadas_osm(texto)
@@ -135,7 +138,10 @@ def texto_a_nodo(texto, archivo_osm="map_clean.osm"):
         return -1
 
     lat, lon = coord
-    return nodo_mas_cercano(lat, lon, nodos)
+    nodo_encontrado = nodo_mas_cercano(lat, lon, nodos)
+
+    print("Nodo encontrado: " + str(nodo_encontrado))
+    return nodo_encontrado
 
 
 
