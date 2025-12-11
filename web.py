@@ -1,6 +1,5 @@
 # web.py (Versión Final Integrada - Con Nodos de Ruta y Correcciones)
 import osmnx as ox
-import networkx as nx
 import plotly.express as px
 import pandas as pd
 import os
@@ -13,7 +12,6 @@ import plotly.graph_objects as go
 from typing import List, Optional
 import routing
 from grafo import Grafo
-# --- NUEVA IMPORTACIÓN ---
 from string_to_node import texto_a_nodo  # Asegúrate de que string_to_node.py esté en el mismo directorio
 
 # -------------------------
