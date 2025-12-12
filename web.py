@@ -456,25 +456,26 @@ def update_map_and_selection(reset_clicks,
     # --- FIN LÓGICA DE ASIGNACIÓN ---
 
     # --- INICIO DE DIBUJO ---
-    # 4. Generar la figura base (con traza de calles)
+    # 4. Generar la figura base (sin traza de calles de fondo)
     fig = go.Figure()
 
-    # Dibujar los caminos de fondo
+    # Añadir una traza invisible para forzar el renderizado del mapa base
     fig.add_trace(go.Scattermapbox(
-        lat=edges_lines['lat'],
-        lon=edges_lines['lon'],
-        mode='lines',
-        line=dict(width=1.5, color='#888888'),
-        name='Calles',
+        lat=[nodes_df['lat'].mean()],
+        lon=[nodes_df['lon'].mean()],
+        mode='markers',
+        marker=dict(size=0, opacity=0),
         showlegend=False,
-        hoverinfo='none',
+        hoverinfo='skip'
     ))
+
+    # Las líneas de fondo del grafo han sido removidas para simplificar la vista
 
     # --- Lógica de Control de Zoom y Centro ---
 
     # 5. Configuración de Layout base
     layout_updates = dict(
-        mapbox_style="carto-positron",
+        mapbox_style="open-street-map",  # Cambiado a OpenStreetMap para mostrar mapa base sin token
         mapbox_bounds={"west": nodes_df['lon'].min(), "east": nodes_df['lon'].max(),
                        "south": nodes_df['lat'].min(), "north": nodes_df['lat'].max()},
 
@@ -596,7 +597,7 @@ def update_map_and_selection(reset_clicks,
             route_coords = [G.nodes[nid] for nid in ruta_nodos if nid in G.nodes]
             route_lats = [coord['y'] for coord in route_coords]
             route_lons = [coord['x'] for coord in route_coords]
-
+            
             fig.add_trace(go.Scattermapbox(
                 mode="lines",
                 lat=route_lats,
