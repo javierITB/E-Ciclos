@@ -13,6 +13,11 @@ from typing import List, Optional
 import routing
 from grafo import Grafo
 from string_to_node import texto_a_nodo  # Asegúrate de que string_to_node.py esté en el mismo directorio
+import osmlib
+
+# Cargar grafo completo una sola vez
+osmlib.preparar_osm("map_clean.osm")
+
 
 # -------------------------
 

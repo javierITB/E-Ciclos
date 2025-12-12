@@ -1,18 +1,82 @@
 import xml.etree.ElementTree as ET
 from geopy.distance import geodesic
 import requests
+import numpy as np
+from scipy.spatial import KDTree
+import time
 
 
-# === 1) Geocodificación solo para direcciones, nunca para intersecciones ===
+# ===========================================
+#   1) ESTRUCTURAS GLOBALES (se llenan una vez)
+# ===========================================
+NODOS = {}
+WAYS = []
+KD_IDS = []
+KD_COORDS = None
+KD_TREE = None
+INDEX_CALLES = {}
+
+
+# ===========================================
+#   2) CARGA INICIAL OSM + PREPARACIÓN
+# ===========================================
+def preparar_osm(ruta):
+    global NODOS, WAYS, KD_IDS, KD_COORDS, KD_TREE, INDEX_CALLES
+
+    print("Cargando archivo OSM...")
+    tree = ET.parse(ruta)
+    root = tree.getroot()
+
+    # ---- NODOS ----
+    NODOS = {}
+    for node in root.findall("node"):
+        node_id = int(node.attrib["id"])
+        lat = float(node.attrib["lat"])
+        lon = float(node.attrib["lon"])
+        NODOS[node_id] = (lat, lon)
+
+    # ---- WAYS ----
+    WAYS = []
+    INDEX_CALLES = {}
+
+    for way in root.findall("way"):
+        nombre = None
+        node_refs = []
+
+        for child in way:
+            if child.tag == "nd":
+                node_refs.append(int(child.attrib["ref"]))
+            elif child.tag == "tag":
+                if child.attrib.get("k") == "name":
+                    nombre = child.attrib.get("v")
+
+        if nombre:
+            WAYS.append({"nombre": nombre, "nodos": node_refs})
+
+            key = nombre.lower()
+            if key not in INDEX_CALLES:
+                INDEX_CALLES[key] = []
+            INDEX_CALLES[key].append(node_refs)
+
+    # ---- KD-TREE ----
+    print("Construyendo KD-Tree...")
+    KD_IDS = list(NODOS.keys())
+    KD_COORDS = np.array([NODOS[nid] for nid in KD_IDS])
+    KD_TREE = KDTree(KD_COORDS)
+
+    print("OSM cargado y optimizado.\n")
+
+
+# ===========================================
+#   3) GEOCODIFICACIÓN SOLO PARA DIRECCIONES
+# ===========================================
 def obtener_coordenadas_osm(direccion: str):
     url = "https://photon.komoot.io/api/"
     params = {
         "q": f"{direccion}, Región Metropolitana, Chile",
         "limit": 1
     }
-    headers = {
-        "User-Agent": "MiAppGeolocalizacion/1.0"
-    }
+    headers = {"User-Agent": "MiAppGeolocalizacion/1.0"}
 
     try:
         r = requests.get(url, params=params, headers=headers, timeout=10)
@@ -26,128 +90,99 @@ def obtener_coordenadas_osm(direccion: str):
 
         lon, lat = features[0]["geometry"]["coordinates"]
         return lat, lon
+
     except:
         return None
 
 
+# ===========================================
+#   4) BUSCAR INTERSECCIÓN ENTRE CALLES
+# ===========================================
+def buscar_interseccion(call1, call2):
+    call1 = call1.lower()
+    call2 = call2.lower()
 
-# === 2) Cargar nodos y ways del dataset OSM ===
-def cargar_osm(ruta):
-    tree = ET.parse(ruta)
-    root = tree.getroot()
+    # Ways por nombre exacto
+    w1 = INDEX_CALLES.get(call1, [])
+    w2 = INDEX_CALLES.get(call2, [])
 
-    nodos = {}      # id → (lat, lon)
-    ways = []       # {nombre, nodos}
-
-    # Nodos
-    for node in root.findall("node"):
-        node_id = int(node.attrib["id"])
-        lat = float(node.attrib["lat"])
-        lon = float(node.attrib["lon"])
-        nodos[node_id] = (lat, lon)
-
-    # Ways
-    for way in root.findall("way"):
-        nombre = None
-        node_refs = []
-
-        for child in way:
-            if child.tag == "nd":
-                node_refs.append(int(child.attrib["ref"]))
-            elif child.tag == "tag":
-                if child.attrib.get("k") == "name":
-                    nombre = child.attrib.get("v")
-
-        if nombre is not None:
-            ways.append({
-                "nombre": nombre,
-                "nodos": node_refs
-            })
-
-    return nodos, ways
-
-
-
-# === 3) Encontrar intersección entre dos calles (SOLO DATASET) ===
-def buscar_interseccion(call1, call2, nodos, ways):
-    # Filtrar ways que coincidan por nombre
-    w1 = [w for w in ways if call1.lower() in w["nombre"].lower()]
-    w2 = [w for w in ways if call2.lower() in w["nombre"].lower()]
+    if not w1 or not w2:
+        # Buscar como subcadena (fallback)
+        w1 = [w["nodos"] for w in WAYS if call1 in w["nombre"].lower()]
+        w2 = [w["nodos"] for w in WAYS if call2 in w["nombre"].lower()]
 
     if not w1 or not w2:
         return -1
 
-    # Nodos de ambas calles
-    nodos1 = set([n for w in w1 for n in w["nodos"]])
-    nodos2 = set([n for w in w2 for n in w["nodos"]])
+    nodos1 = set(n for lista in w1 for n in lista)
+    nodos2 = set(n for lista in w2 for n in lista)
 
-    # Intersección exacta
+    # ---- Intersección exacta ----
     inter = nodos1.intersection(nodos2)
     if inter:
-        return list(inter)[0]
+        return next(iter(inter))
 
-    # Si no existe: aproximar
-    min_dist = float("inf")
-    best = None
+    # ---- Aproximación usando KD-Tree ----
+    coords2 = np.array([NODOS[n] for n in nodos2])
+    tree2 = KDTree(coords2)
+    nodos2_list = list(nodos2)
+
+    best_dist = float("inf")
+    best_node = None
 
     for n1 in nodos1:
-        for n2 in nodos2:
-            d = geodesic(nodos[n1], nodos[n2]).meters
-            if d < min_dist:
-                min_dist = d
-                best = n1
+        dist, idx = tree2.query(NODOS[n1])
+        if dist < best_dist:
+            best_dist = dist
+            best_node = nodos2_list[idx]
 
-    if min_dist <= 100:
-        return best
+    return best_node if best_dist <= 100 else -1
 
+
+# ===========================================
+#   5) BUSCAR NODO MÁS CERCANO
+# ===========================================
+def nodo_mas_cercano(lat, lon, max_dist=100):
+    punto = np.array([lat, lon])
+    dist, idx = KD_TREE.query(punto)
+
+    if dist <= max_dist:
+        return KD_IDS[idx]
     return -1
 
 
+# ===========================================
+#   6) CONVERSIÓN FINAL TEXTO → NODO (con tiempo)
+# ===========================================
+def texto_a_nodo(texto):
+    inicio = time.time()  # ← medir tiempo antes
 
-# === 4) Buscar nodo más cercano a una coordenada dentro del dataset ===
-def nodo_mas_cercano(lat, lon, nodos, max_dist=100):
-    punto = (lat, lon)
-    best_id = None
-    best_d = float("inf")
-
-    for nid, (nlat, nlon) in nodos.items():
-        d = geodesic(punto, (nlat, nlon)).meters
-        if d < best_d:
-            best_d = d
-            best_id = nid
-
-    return best_id if best_d <= max_dist else -1
-
-
-
-# === 5) Función final texto → nodo usando SOLO el dataset ===
-def texto_a_nodo(texto, archivo_osm="map_clean.osm"):
-    nodos, ways = cargar_osm(archivo_osm)
-
-    # --- Intersección ---
+    # Caso intersección
     if "," in texto:
         c1, c2 = [s.strip() for s in texto.split(",", 1)]
-        nodo_encontrado = buscar_interseccion(c1, c2, nodos, ways)
+        nodo = buscar_interseccion(c1, c2)
+        tiempo = f"[{(time.time() - inicio):.4f}s]"
+        print(tiempo + " Nodo encontrado:", nodo)
+        return nodo
 
-        print("Nodo encontrado: " + str(nodo_encontrado))
-        return nodo_encontrado
-
-    # --- Dirección normal ---
+    # Caso dirección normal
     coord = obtener_coordenadas_osm(texto)
     if coord is None:
+        tiempo = f"[{(time.time() - inicio):.4f}s]"
+        print(tiempo + " No se pudo geocodificar.")
         return -1
 
     lat, lon = coord
-    nodo_encontrado = nodo_mas_cercano(lat, lon, nodos)
+    nodo = nodo_mas_cercano(lat, lon)
 
-    print("Nodo encontrado: " + str(nodo_encontrado))
-    return nodo_encontrado
+    tiempo = f"[{(time.time() - inicio):.4f}s]"
+    print(tiempo + " Nodo encontrado:", nodo)
+    return nodo
 
 
-
-# === EJEMPLOS ===
-# 1) Intersección:
-print(texto_a_nodo("Gorbea, Vergara"))
-
-# 2) Dirección normal:
-# print(texto_a_nodo("cenco ñuñoa"))
+# ===========================================
+#   7) EJEMPLO
+# ===========================================
+if __name__ == "__main__":
+    #preparar_osm("map_clean.osm")
+    print(texto_a_nodo("Gorbea, Vergara"))
