@@ -114,9 +114,6 @@ if G is None:
     ], fluid=True)
 else:
     app.layout = dbc.Container([
-        dbc.Row([
-            dbc.Col(html.H1("🗺️ Ruteo Inteligente en Santiago", className="my-3 text-center text-primary"), width=12)
-        ]),
         html.Hr(className="mb-4"),
 
         dbc.Row([
@@ -165,8 +162,7 @@ else:
 
                 dbc.Button('🔄 Resetear Selección', id='btn-reset', n_clicks=0, color="warning", className="w-100 mt-4"),
                 html.Hr(className="my-4"),
-                dbc.Button('⛰️ Mostrar/Ocultar Vista 3D (Altitud)', id='btn-3d-toggle', n_clicks=0, color="dark",
-                           className="w-100"),
+
             ], width=3, className="p-4 bg-light border-end shadow-sm",
                 style={'minHeight': '90vh', 'overflowY': 'auto'}),  # Mantener minHeight para alinear
 
@@ -196,7 +192,7 @@ else:
         # --- COMPONENTE DE ESTADO INVISIBLE PARA EL MODO DE CLIC ---
         dcc.Store(id='store-click-mode', data={'next_selection': 'ORIGEN'}),
         # ----------------------------------------------------------
-
+        html.Hr(className="mb-4"),
     ], fluid=True, className="p-0")
 
 # --- Función de Ayuda: Encontrar el Nodo Más Cercano ---
@@ -304,7 +300,6 @@ def handle_map_click(clickData, mode_data):
     [Output('store-origen-id', 'data', allow_duplicate=True),
      Output('store-destino-id', 'data', allow_duplicate=True),
      Output('selection-status', 'children', allow_duplicate=True)],
-    # Se permite que este callback también actualice el estado
     [Input('btn-fijar-origen', 'n_clicks'),
      Input('btn-fijar-destino', 'n_clicks'),
      Input('btn-reset', 'n_clicks')],
@@ -324,10 +319,8 @@ def handle_text_input(n_origen, n_destino, n_reset,
 
     # 1. Lógica de Reseteo
     if trigger_id == 'btn-reset':
-        # (La limpieza de globales se mantiene aquí por si acaso, aunque el Callback 2 también lo hace)
         RUTA_DIJKSTRA = None
         RUTA_ASTAR = None
-        # Devuelve None para los stores, y el estado inicial
         return None, None, html.Div(["👆 Fija Origen y Destino usando texto o IDs."], className="fw-bold")
 
     # Inicializar las salidas
@@ -416,23 +409,8 @@ def handle_text_input(n_origen, n_destino, n_reset,
                 # ***ESTE MENSAJE PERSISTIRÁ porque este callback es el que lo genera***
                 status_msg = html.Div([f"⛔ Error en la búsqueda de Destino: {e}"], className="text-danger")
 
-    # Si se actualizó un store (es decir, new_origen_id/new_destino_id cambió y no hay mensaje de error),
-    # el callback 3 se encargará del mensaje final.
     return new_origen_id, new_destino_id, status_msg
 
-# --- FIN NUEVO CALLBACK ---
-
-
-# Callback 1: Toggle (Mostrar/Ocultar) la vista 3D
-@app.callback(
-    Output("collapse-3d", "is_open"),
-    [Input("btn-3d-toggle", "n_clicks")],
-    [State("collapse-3d", "is_open")],
-)
-def toggle_collapse(n_clicks, is_open):
-    if n_clicks:
-        return not is_open
-    return is_open
 
 
 # Callback 2: Dibujar el Mapa 2D y la Ruta (Versión Estabilizada y unificada)
@@ -484,7 +462,7 @@ def update_map_and_selection(reset_clicks,
         line=dict(width=1.5, color='#888888'),
         name='Calles',
         showlegend=False,
-        hoverinfo='skip',
+        hoverinfo='none',
     ))
 
     # --- Lógica de Control de Zoom y Centro ---
@@ -694,52 +672,6 @@ def update_status_text_from_store(origen_id, destino_id):
     else:
         return html.Div(["Fija Origen y Destino usando texto o IDs."], className="fw-bold")
 
-# Callback 4: Generar la figura 3D (SE MANTIENE IGUAL)
-@app.callback(
-    Output('mapa-3d-altitud', 'figure'),
-    [Input('btn-3d-toggle', 'n_clicks')]
-)
-def update_3d_figure(n_clicks):
-    if not n_clicks or G is None:
-        return dash.no_update
-
-    min_alt = nodes_df['altitud_m'].min()
-    max_alt = nodes_df['altitud_m'].max()
-    range_x = nodes_df['lon'].max() - nodes_df['lon'].min()
-
-    nodes_df['Z_normalized'] = nodes_df['altitud_m'].apply(
-        lambda z: nodes_df['lat'].mean() + (z - min_alt) / (max_alt - min_alt) * range_x * 10
-    )
-
-    fig = px.scatter_3d(
-        nodes_df,
-        x='lon',
-        y='lat',
-        z='Z_normalized',
-        color='peligrosidad',
-        color_continuous_scale=px.colors.sequential.Hot,
-        title="Vista 3D de Altitud y Peligrosidad (Escala Aumentada)",
-        labels={'lon': 'Longitud', 'lat': 'Latitud', 'Z_normalized': 'Altitud Normalizada',
-                'peligrosidad': 'Peligrosidad'},
-        height=700
-    )
-
-    fig.update_layout(
-        legend=dict(
-            # Configuración para posicionar la leyenda en la esquina superior derecha
-            x=0.99,  # Posición horizontal (0.99 es casi el borde derecho)
-            y=0.99,  # Posición vertical (0.99 es casi el borde superior)
-            xanchor="right",  # Ancla el borde derecho de la caja de leyenda a x=0.99
-            yanchor="top",  # Ancla el borde superior de la caja de leyenda a y=0.99
-
-            # Estilos opcionales para mejorar la visibilidad sobre el mapa
-            bgcolor="rgba(255, 255, 255, 0.8)",  # Fondo blanco semi-transparente
-            bordercolor="Gray",
-            borderwidth=1,
-            title=None,  # Quita el título de la leyenda
-        ),
-    )
-    return fig
 
 
 # Callback 5: Calcular y almacenar las rutas (Corregido el error de Dijkstra)
