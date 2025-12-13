@@ -7,7 +7,7 @@ Instrucciones:
 docker compose up
 ```
 
-
+Cabe a destacar que la ejecución de docker se demorará 3 minutos aproximadamente debido al tamaño del dataset.
 
 3) abrir el enlace: http://127.0.0.1:8050/
 4) Escribir la dirección de origen (Ejemplo: Los Dominicos) y luego presinar el boton de fijar
