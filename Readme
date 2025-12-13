@@ -1,0 +1,18 @@
+Instrucciones:
+
+1) Bajar el proyecto en ```git@github.com:javierITB/E-Ciclos.git```
+2) Una vez adentro de la carpeta raiz ```E-Ciclos```, se debe ejecutar el siguiente comando de docker:
+
+```
+docker compose up
+```
+
+
+
+3) abrir el enlace: http://127.0.0.1:8050/
+4) Escribir la dirección de origen (Ejemplo: Los Dominicos) y luego presinar el boton de fijar
+5) Escribir la dirección de destino (Ejemplo: Ejercito 441) y luego presinar el boton de fijar
+6) Presionar el boton para calcular ruta
+
+
+Para seleccionar otros nodos se debe presionar en el boton Resetear selección.

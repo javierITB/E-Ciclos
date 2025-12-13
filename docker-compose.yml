@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  ciclovias:
+    build: .
+    container_name: ciclovias-app
+    ports:
+      - "8050:8050"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8050
+    volumes:
+      - .:/app
+    restart: unless-stopped

@@ -1,0 +1,12 @@
+dash
+dash-bootstrap-components
+plotly
+pandas
+osmnx
+networkx
+shapely
+geopandas
+pyproj
+fiona
+geopy
+scipy
