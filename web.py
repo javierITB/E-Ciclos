@@ -680,12 +680,12 @@ def update_status_text_from_store(origen_id, destino_id):
 
 
 
-# Callback 5: Calcular y almacenar las rutas (Corregido el error de Dijkstra)
+
+# Callback 5: Calcular y almacenar las rutas (Corregido y con métrica de esfuerzo)
 @app.callback(
     [Output('ruta-output', 'children'),
      Output('ruta-nodos-list', 'children')],
     [Input('btn-ruta', 'n_clicks')],
-    # CAMBIO: Usamos los STORES para obtener el Origen/Destino final
     [State('store-origen-id', 'data'),
      State('store-destino-id', 'data')],
     prevent_initial_call=True
@@ -700,47 +700,66 @@ def calcular_rutas(n_clicks, origen_id, destino_id):
     if G_CUSTOM is None or PUNTO_ORIGEN is None or PUNTO_DESTINO is None:
         return dbc.Alert("Seleccione Origen y Destino válidos antes de calcular.", color="danger"), None
 
+    # Parámetros para A* (manteniendo la lógica escalar antigua)
     W_DIST = 1.0
     W_ELEV = 0.0
     W_SEG = 1000.0
 
-    # 1. Ejecutar Dijkstra
+    # 1. Ejecutar Dijkstra (Ahora es Lexicográfico: Prioriza Distancia, luego Esfuerzo)
+    # Los pesos W_* son ignorados por el nuevo dijkstra, pero se pasan por compatibilidad.
     RUTA_DIJKSTRA = None
+    esfuerzo_dijkstra = None
     try:
-        # Se asume que routing.dijkstra devuelve (costos, predecesores)
         cost_dijkstra, prev_dijkstra = routing.dijkstra(G_CUSTOM, PUNTO_ORIGEN, PUNTO_DESTINO,
                                                         w_dist=W_DIST, w_elev=W_ELEV, w_seg=W_SEG)
 
-        # Corrección: Asegurarse de que el camino fue encontrado antes de reconstruir
         if PUNTO_DESTINO in prev_dijkstra and prev_dijkstra[PUNTO_DESTINO] is not None:
             RUTA_DIJKSTRA = routing.reconstruir_camino(prev_dijkstra, PUNTO_ORIGEN, PUNTO_DESTINO)
+            
+            # --- CÁLCULO DE MÉTRICA DE ESFUERZO PARA LA RUTA ---
+            esfuerzo_dijkstra = routing.porcentaje_esfuerzoruta(RUTA_DIJKSTRA, G_CUSTOM)
+            # ----------------------------------------------------
         else:
             print("Dijkstra no encontró camino.")
     except Exception as e:
         print(f"Error en Dijkstra: {e}")
 
-    # 2. Ejecutar A*
+    # 2. Ejecutar A* (Mantiene la lógica escalar con pesos)
     RUTA_ASTAR = None
+    esfuerzo_astar = None
     try:
         RUTA_ASTAR = routing.a_estrella(G_CUSTOM, PUNTO_ORIGEN, PUNTO_DESTINO,
                                         w_dist=W_DIST, w_elev=W_ELEV, w_seg=W_SEG)
+        
+        # --- CÁLCULO DE MÉTRICA DE ESFUERZO PARA LA RUTA ---
+        if RUTA_ASTAR:
+            esfuerzo_astar = routing.porcentaje_esfuerzoruta(RUTA_ASTAR, G_CUSTOM)
+        # ----------------------------------------------------
     except Exception as e:
         print(f"Error en A*: {e}")
 
-    # 3. Generación del Listado de Nodos
+    # 3. Generación del Listado de Nodos y Resultados
     ruta_nodos_html = []
     dijkstra_encontrada = bool(RUTA_DIJKSTRA)
     astar_encontrada = bool(RUTA_ASTAR)
 
+    # Función para formatear el esfuerzo
+    def format_esfuerzo(esfuerzo):
+        return f"{esfuerzo * 100:.2f}%" if esfuerzo is not None else "N/A"
+
     if dijkstra_encontrada:
-        ruta_nodos_html.append(html.B("Ruta Dijkstra (IDs):", className="d-block text-primary mt-2"))
+        ruta_nodos_html.append(html.B("Ruta Dijkstra (Costo/Esfuerzo Mínimo):", className="d-block text-primary mt-2"))
+        ruta_nodos_html.append(html.P(f"Esfuerzo Relativo: {format_esfuerzo(esfuerzo_dijkstra)}", 
+                                      className="small text-success"))
         dijkstra_ids_str = ' → '.join(map(str, RUTA_DIJKSTRA))
         ruta_nodos_html.append(html.P(dijkstra_ids_str, style={'wordBreak': 'break-all'}))
     else:
-        ruta_nodos_html.append(html.P("Dijkstra: No se encontró camino.", className="text-muted mt-2"))
+        ruta_nodos_html.append(html.P("Dijkstra: No se encontró camino (posiblemente por pendiente > 15°).", className="text-muted mt-2"))
 
     if astar_encontrada:
-        ruta_nodos_html.append(html.B("Ruta A* (IDs):", className="d-block text-warning mt-3"))
+        ruta_nodos_html.append(html.B("Ruta A* (Costo Escalar con Pesos):", className="d-block text-warning mt-3"))
+        ruta_nodos_html.append(html.P(f"Esfuerzo Relativo: {format_esfuerzo(esfuerzo_astar)}", 
+                                      className="small text-success"))
         astar_ids_str = ' → '.join(map(str, RUTA_ASTAR))
         ruta_nodos_html.append(html.P(astar_ids_str, style={'wordBreak': 'break-all'}))
     else:
@@ -751,7 +770,6 @@ def calcular_rutas(n_clicks, origen_id, destino_id):
         d_len = len(RUTA_DIJKSTRA) if dijkstra_encontrada else 0
         a_len = len(RUTA_ASTAR) if astar_encontrada else 0
 
-        # Muestra si las rutas son iguales, abordando tu pregunta.
         rutas_iguales = dijkstra_encontrada and astar_encontrada and RUTA_DIJKSTRA == RUTA_ASTAR
 
         mensaje = f"Rutas calculadas. Dijkstra: {d_len} nodos. A*: {a_len} nodos."
@@ -765,7 +783,7 @@ def calcular_rutas(n_clicks, origen_id, destino_id):
         return msg, html.Div(ruta_nodos_html)
     else:
         return dbc.Alert("No se pudo encontrar ninguna ruta entre los puntos seleccionados.", color="danger"), None
-
+    
 
 # --- INICIO DE LA APLICACIÓN --- (SE MANTIENE IGUAL)
 if __name__ == '__main__':
