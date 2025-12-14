@@ -135,6 +135,7 @@ else:
                 # Usaremos estos dcc.Store para guardar los IDs de nodo numéricos
                 dcc.Store(id='store-origen-id', data=None),
                 dcc.Store(id='store-destino-id', data=None),
+                dcc.Store(id='store-show-graph', data=False),
                 # ------------------------------------
 
                 dbc.Label("📍 Origen (Texto o ID de Nodo):", className="mt-3 form-label"),
@@ -165,6 +166,7 @@ else:
                 # Fin Contenedores
 
                 dbc.Button('🔄 Resetear Selección', id='btn-reset', n_clicks=0, color="warning", className="w-100 mt-4"),
+                dbc.Button('Ver rutas disponibles', id='btn-show-graph', n_clicks=0, color="primary", className="w-100 mt-3"),
                 html.Hr(className="my-4"),
 
             ], width=3, className="p-4 bg-light border-end shadow-sm",
@@ -172,16 +174,22 @@ else:
 
             # 2. MAPA PRINCIPAL (Ocupa el espacio restante)
             dbc.Col([
-                dcc.Graph(
-                    id='mapa-2d-interactivo',
-                    # Aseguramos que la altura sea 100% del contenedor Col
-                    style={'height': '100%', 'width': '100%'},
-                    config={
-                        'displayModeBar': False,
-                        'scrollZoom': True,
-                        'doubleClick': 'reset'
-                    }
-                ),
+                html.Div([
+                    dcc.Graph(
+                        id='mapa-2d-interactivo',
+                        # Aseguramos que la altura sea 100% del contenedor Col
+                        style={'height': '100%', 'width': '100%'},
+                        config={
+                            'displayModeBar': False,
+                            'scrollZoom': True,
+                            'doubleClick': 'reset'
+                        }
+                    ),
+                    html.Div([
+                        dbc.Button('➕', id='btn-zoom-in', n_clicks=0, color="secondary", size="sm", className="mb-1"),
+                        dbc.Button('➖', id='btn-zoom-out', n_clicks=0, color="secondary", size="sm"),
+                    ], style={'position': 'absolute', 'bottom': '10px', 'right': '10px', 'z-index': '1000'}),
+                ], style={'position': 'relative', 'height': '100%', 'width': '100%'}),
                 dbc.Collapse(
                     html.Div([
                         html.H5("Vista 3D (Altitud y Peligrosidad)", className="mt-3 text-center text-info"),
@@ -416,22 +424,45 @@ def handle_text_input(n_origen, n_destino, n_reset,
 
 # Callback 2: Dibujar el Mapa 2D y la Ruta (Versión Estabilizada y unificada)
 @app.callback(
-    Output('mapa-2d-interactivo', 'figure'),
+    [Output('mapa-2d-interactivo', 'figure'),
+     Output('store-show-graph', 'data')],
     [Input('btn-reset', 'n_clicks'),
      Input('ruta-output', 'children'),
-     # CAMBIO: Usamos los valores de los STORES para disparar el redibujo
      Input('store-origen-id', 'data'),
-     Input('store-destino-id', 'data')],
-    [State('mapa-2d-interactivo', 'figure')]
+     Input('store-destino-id', 'data'),
+     Input('btn-zoom-in', 'n_clicks'),
+     Input('btn-zoom-out', 'n_clicks'),
+     Input('btn-show-graph', 'n_clicks')],
+    [State('mapa-2d-interactivo', 'figure'),
+     State('store-show-graph', 'data')]
 )
 def update_map_and_selection(reset_clicks,
                              ruta_output_children,
                              origen_id, destino_id,  # Los valores de los STORES
-                             current_figure):
+                             zoom_in_clicks, zoom_out_clicks,
+                             show_graph_clicks,
+                             current_figure,
+                             current_show_graph):
     global PUNTO_ORIGEN, PUNTO_DESTINO, RUTA_DIJKSTRA, RUTA_ASTAR, G, nodes_df, edges_lines
 
     ctx = dash.callback_context
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else 'initial_load'
+
+    # Obtener zoom y centro actuales
+    current_zoom = current_figure.get('layout', {}).get('mapbox', {}).get('zoom', 13) if current_figure else 13
+    current_center = current_figure.get('layout', {}).get('mapbox', {}).get('center', {"lat": nodes_df['lat'].mean(), "lon": nodes_df['lon'].mean()}) if current_figure else {"lat": nodes_df['lat'].mean(), "lon": nodes_df['lon'].mean()}
+
+    # Manejar zoom
+    if trigger_id == 'btn-zoom-in':
+        current_zoom = min(current_zoom + 1, 20)
+    elif trigger_id == 'btn-zoom-out':
+        current_zoom = max(current_zoom - 1, 1)
+
+    # Manejar mostrar grafo
+    if trigger_id == 'btn-show-graph':
+        new_show_graph = not current_show_graph
+    else:
+        new_show_graph = current_show_graph
 
     # 1. Lógica de Reseteo (Se mantiene)
     if trigger_id == 'btn-reset':
@@ -478,9 +509,11 @@ def update_map_and_selection(reset_clicks,
         hovermode="closest",
 
         # uirevision por defecto (mantiene la vista)
-        uirevision=str(PUNTO_ORIGEN) + str(PUNTO_DESTINO) + str(bool(RUTA_ASTAR)),
+        uirevision=str(PUNTO_ORIGEN) + str(PUNTO_DESTINO) + str(bool(RUTA_ASTAR)) + str(current_zoom),
 
         title="Mapa de Calles de Santiago (Selección por ID/Texto)",
+        mapbox_zoom=current_zoom,
+        mapbox_center=current_center,
     )
 
     # 5.1. Lógica para centrar en el punto recién fijado (SOLO SI SE FIJÓ UN PUNTO)
@@ -632,7 +665,30 @@ def update_map_and_selection(reset_clicks,
 
     dibujar_nodos_ruta(RUTA_ASTAR, "A*", "#E63946")
 
-    return fig
+    # 9. Dibujar grafo completo si está activado
+    if new_show_graph and G is not None:
+        # Dibujar aristas
+        fig.add_trace(go.Scattermapbox(
+            lat=edges_lines['lat'],
+            lon=edges_lines['lon'],
+            mode='lines',
+            line=dict(width=1, color='blue'),
+            name='Calles',
+            showlegend=True
+        ))
+        # Dibujar nodos
+        all_lats = [G.nodes[nid]['y'] for nid in G.nodes]
+        all_lons = [G.nodes[nid]['x'] for nid in G.nodes]
+        fig.add_trace(go.Scattermapbox(
+            lat=all_lats,
+            lon=all_lons,
+            mode='markers',
+            marker=dict(size=2, color='red', opacity=0.3),
+            name='Nodos',
+            showlegend=True
+        ))
+
+    return fig, new_show_graph
 
 
 # Callback 3: Actualizar el estado de la selección (ACTUALIZADO para solo manejar estados OK)
