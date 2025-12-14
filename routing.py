@@ -40,35 +40,17 @@ def coste_arista(camino: Camino, nodo_origen: Nodo, nodo_destino: Nodo,
                  w_dist: float = 1.0, w_elev: float = 0.0, w_seg: float = 0.0) -> float:
     """Calcula el coste de recorrer `camino` desde `nodo_origen` hacia `nodo_destino`.
 
-    Componentes basadas en el modelo del informe:
-    - distancia horizontal (Haversine, en metros)
-    - esfuerzo adicional por elevación: F_i = sqrt(d_i^2 + max(0, Δh_i)^2) - d_i
+    Componentes:
+    - distancia (metros)
+    - ganancia de altura positiva (si destino está más alto que origen)
     - seguridad: `nodo_destino.prob_accidente` penalizado por `camino.importancia`
-    
-    Filtro de pendiente máxima: si θ > 15°, la arista se considera no transitable (costo infinito).
     """
-    # Distancia horizontal (Haversine)
-    d_i = distancia_haversine(nodo_origen.latitud, nodo_origen.longitud,
-                              nodo_destino.latitud, nodo_destino.longitud)
-    
-    # Variación de altura
-    delta_h = nodo_destino.altura - nodo_origen.altura
-    
-    # Filtro de pendiente máxima: θ_max = 15°
-    if d_i > 0:
-        theta_rad = math.atan(delta_h / d_i)
-        theta_deg = math.degrees(theta_rad)
-        if theta_deg > 15.0:
-            return math.inf
-    
-    # Esfuerzo por tramo según ecuación del informe: F_i = sqrt(d_i^2 + max(0, Δh_i)^2)
-    F_i = math.sqrt(d_i**2 + max(0.0, delta_h)**2)
-    esfuerzo_adicional = F_i - d_i  # Esfuerzo adicional respecto a terreno plano
-    
-    # Componente de seguridad
+    distancia = distancia_haversine(nodo_origen.latitud, nodo_origen.longitud,
+                                     nodo_destino.latitud, nodo_destino.longitud)
+    ganancia_altura = max(0.0, nodo_destino.altura - nodo_origen.altura)
     seguridad = nodo_destino.prob_accidente * (1.0 / max(1.0, camino.importancia))
-    
-    return w_dist * d_i + w_elev * esfuerzo_adicional + w_seg * seguridad
+
+    return w_dist * distancia + w_elev * ganancia_altura + w_seg * seguridad
 
 
 def dijkstra(grafo, inicio_id: int, objetivo_id: Optional[int] = None, *,

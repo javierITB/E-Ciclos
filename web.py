@@ -29,7 +29,6 @@ G = None  # Grafo NetworkX
 G_CUSTOM = None  # Grafo personalizado (Grafo)
 PUNTO_ORIGEN = None
 PUNTO_DESTINO = None
-RUTA_DIJKSTRA = None
 RUTA_ASTAR = None
 
 
@@ -324,7 +323,6 @@ def handle_text_input(n_origen, n_destino, n_reset,
 
     # 1. Lógica de Reseteo
     if trigger_id == 'btn-reset':
-        RUTA_DIJKSTRA = None
         RUTA_ASTAR = None
         return None, None, html.Div(["👆 Fija Origen y Destino usando texto o IDs."], className="fw-bold")
 
@@ -357,7 +355,6 @@ def handle_text_input(n_origen, n_destino, n_reset,
                 if node_id != -1 and node_id in G:
                     new_origen_id = int(node_id)
                     # Limpiamos las rutas
-                    RUTA_DIJKSTRA = None
                     RUTA_ASTAR = None
                     status_msg = no_update  # Se actualizará con el callback de estado general
                 else:
@@ -397,7 +394,6 @@ def handle_text_input(n_origen, n_destino, n_reset,
                     new_destino_id = int(node_id)
 
                     # Limpiamos las rutas
-                    RUTA_DIJKSTRA = None
                     RUTA_ASTAR = None
                     status_msg = no_update  # Se actualizará con el callback de estado general
                 else:
@@ -441,7 +437,6 @@ def update_map_and_selection(reset_clicks,
     if trigger_id == 'btn-reset':
         PUNTO_ORIGEN = None
         PUNTO_DESTINO = None
-        RUTA_DIJKSTRA = None
         RUTA_ASTAR = None
         # Ya no hace falta anular aquí, pues lo hace el callback de texto.
 
@@ -483,7 +478,7 @@ def update_map_and_selection(reset_clicks,
         hovermode="closest",
 
         # uirevision por defecto (mantiene la vista)
-        uirevision=str(PUNTO_ORIGEN) + str(PUNTO_DESTINO) + str(bool(RUTA_DIJKSTRA)) + str(bool(RUTA_ASTAR)),
+        uirevision=str(PUNTO_ORIGEN) + str(PUNTO_DESTINO) + str(bool(RUTA_ASTAR)),
 
         title="Mapa de Calles de Santiago (Selección por ID/Texto)",
     )
@@ -608,7 +603,6 @@ def update_map_and_selection(reset_clicks,
                 showlegend=True
             ))
 
-    dibujar_ruta(RUTA_DIJKSTRA, "Ruta Dijkstra (Costo Mínimo)", "blue", 1.0)
     dibujar_ruta(RUTA_ASTAR, "Ruta A* (Heurística)", "orange", 1.0)
 
     # 8. Dibujar los Nodos Intermedios de las Rutas (Puntos)
@@ -636,7 +630,6 @@ def update_map_and_selection(reset_clicks,
                 showlegend=True
             ))
 
-    dibujar_nodos_ruta(RUTA_DIJKSTRA, "Dijkstra", "#0077B6")
     dibujar_nodos_ruta(RUTA_ASTAR, "A*", "#E63946")
 
     return fig
@@ -704,22 +697,7 @@ def calcular_rutas(n_clicks, origen_id, destino_id):
     W_ELEV = 0.0
     W_SEG = 1000.0
 
-    # 1. Ejecutar Dijkstra
-    RUTA_DIJKSTRA = None
-    try:
-        # Se asume que routing.dijkstra devuelve (costos, predecesores)
-        cost_dijkstra, prev_dijkstra = routing.dijkstra(G_CUSTOM, PUNTO_ORIGEN, PUNTO_DESTINO,
-                                                        w_dist=W_DIST, w_elev=W_ELEV, w_seg=W_SEG)
-
-        # Corrección: Asegurarse de que el camino fue encontrado antes de reconstruir
-        if PUNTO_DESTINO in prev_dijkstra and prev_dijkstra[PUNTO_DESTINO] is not None:
-            RUTA_DIJKSTRA = routing.reconstruir_camino(prev_dijkstra, PUNTO_ORIGEN, PUNTO_DESTINO)
-        else:
-            print("Dijkstra no encontró camino.")
-    except Exception as e:
-        print(f"Error en Dijkstra: {e}")
-
-    # 2. Ejecutar A*
+    # 1. Ejecutar A*
     RUTA_ASTAR = None
     try:
         RUTA_ASTAR = routing.a_estrella(G_CUSTOM, PUNTO_ORIGEN, PUNTO_DESTINO,
@@ -727,17 +705,9 @@ def calcular_rutas(n_clicks, origen_id, destino_id):
     except Exception as e:
         print(f"Error en A*: {e}")
 
-    # 3. Generación del Listado de Nodos
+    # 2. Generación del Listado de Nodos
     ruta_nodos_html = []
-    dijkstra_encontrada = bool(RUTA_DIJKSTRA)
     astar_encontrada = bool(RUTA_ASTAR)
-
-    if dijkstra_encontrada:
-        ruta_nodos_html.append(html.B("Ruta Dijkstra (IDs):", className="d-block text-primary mt-2"))
-        dijkstra_ids_str = ' → '.join(map(str, RUTA_DIJKSTRA))
-        ruta_nodos_html.append(html.P(dijkstra_ids_str, style={'wordBreak': 'break-all'}))
-    else:
-        ruta_nodos_html.append(html.P("Dijkstra: No se encontró camino.", className="text-muted mt-2"))
 
     if astar_encontrada:
         ruta_nodos_html.append(html.B("Ruta A* (IDs):", className="d-block text-warning mt-3"))
@@ -746,20 +716,11 @@ def calcular_rutas(n_clicks, origen_id, destino_id):
     else:
         ruta_nodos_html.append(html.P("A*: No se encontró camino.", className="text-muted"))
 
-    # 4. Respuesta Final
-    if dijkstra_encontrada or astar_encontrada:
-        d_len = len(RUTA_DIJKSTRA) if dijkstra_encontrada else 0
+    # 3. Respuesta Final
+    if astar_encontrada:
         a_len = len(RUTA_ASTAR) if astar_encontrada else 0
 
-        # Muestra si las rutas son iguales, abordando tu pregunta.
-        rutas_iguales = dijkstra_encontrada and astar_encontrada and RUTA_DIJKSTRA == RUTA_ASTAR
-
-        mensaje = f"Rutas calculadas. Dijkstra: {d_len} nodos. A*: {a_len} nodos."
-
-        if rutas_iguales:
-            mensaje += " **¡Ambos algoritmos encontraron la misma ruta óptima!**"
-
-        mensaje += " El mapa se ha actualizado."
+        mensaje = f"Ruta calculada con A*. {a_len} nodos. El mapa se ha actualizado."
 
         msg = dbc.Alert(mensaje, color="success")
         return msg, html.Div(ruta_nodos_html)
