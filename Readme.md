@@ -1,6 +1,11 @@
 Instrucciones:
 
-1) Ejecutar por consola ```git clone git@github.com:javierITB/E-Ciclos.git```
+1) Ejecutar por consola:
+
+```
+git clone git@github.com:javierITB/E-Ciclos.git
+```
+
 2) Una vez adentro de la carpeta raiz ```E-Ciclos```, se debe ejecutar el siguiente comando de docker:
 
 ```
