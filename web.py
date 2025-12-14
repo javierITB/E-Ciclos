@@ -207,10 +207,20 @@ else:
         html.Hr(className="mb-4"),
     ], fluid=True, className="p-0")
 
-# --- Función de Ayuda: Encontrar el Nodo Más Cercano ---
-import numpy as np
-import dash.exceptions
-from dash import no_update
+def get_viewport_bounds(center_lat, center_lon, zoom):
+    """Calcula el bounding box aproximado del viewport basado en center y zoom."""
+    # Aproximación: en zoom alto, el viewport es pequeño
+    # Factor aproximado: en zoom 10, ~10 grados; zoom 15, ~1 grado, etc.
+    scale = 360 / (2 ** zoom)  # Grados de longitud visibles aproximadamente
+    lat_range = scale * 0.7  # Ajuste para latitud (mapas no son cuadrados)
+    lon_range = scale
+    
+    min_lat = center_lat - lat_range / 2
+    max_lat = center_lat + lat_range / 2
+    min_lon = center_lon - lon_range / 2
+    max_lon = center_lon + lon_range / 2
+    
+    return min_lat, max_lat, min_lon, max_lon
 
 
 def get_nearest_node(graph, lat, lon):
@@ -676,15 +686,16 @@ def update_map_and_selection(reset_clicks,
             name='Calles',
             showlegend=True
         ))
-        # Dibujar nodos
-        all_lats = [G.nodes[nid]['y'] for nid in G.nodes]
-        all_lons = [G.nodes[nid]['x'] for nid in G.nodes]
+        # Dibujar nodos (optimizado: subsample para evitar sobrecarga)
+        sampled_nodes = random.sample(list(G.nodes), min(2000, len(G.nodes)))
+        all_lats = [G.nodes[nid]['y'] for nid in sampled_nodes]
+        all_lons = [G.nodes[nid]['x'] for nid in sampled_nodes]
         fig.add_trace(go.Scattermapbox(
             lat=all_lats,
             lon=all_lons,
             mode='markers',
-            marker=dict(size=2, color='red', opacity=0.3),
-            name='Nodos',
+            marker=dict(size=1, color='red', opacity=0.2),
+            name='Nodos (muestra)',
             showlegend=True
         ))
 
