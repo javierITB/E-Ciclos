@@ -1,0 +1,19 @@
+REPORTE DE GENERACIÓN DE GRÁFICAS - PROYECTO E-CICLOS
+============================================================
+
+Total de gráficas generadas: 6/6
+
+GRÁFICAS VIABLES:
+  ✓ Distribución de pendientes
+  ✓ Comparación de esfuerzo
+  ✓ Mapa de calor de peligrosidad
+  ✓ Tiempos de algoritmos
+  ✓ Pendientes descartadas
+  ✓ Impacto de pesos
+
+GRÁFICAS NO VIABLES:
+
+DATOS UTILIZADOS:
+  - Grafo: map_clean.osm (red vial real de Santiago)
+  - Alturas: Desde alturas_santiago.csv o OSM 'ele' (con simulación como fallback)
+  - Peligrosidad: Simulada (mejorable con datos CONASET)
