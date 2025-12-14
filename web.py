@@ -687,18 +687,21 @@ def update_map_and_selection(reset_clicks,
             showlegend=True
         ))
         # Dibujar nodos (optimizado: subsample para evitar sobrecarga)
+        """
         sampled_nodes = random.sample(list(G.nodes), min(2000, len(G.nodes)))
+        
         all_lats = [G.nodes[nid]['y'] for nid in sampled_nodes]
         all_lons = [G.nodes[nid]['x'] for nid in sampled_nodes]
+        
         fig.add_trace(go.Scattermapbox(
             lat=all_lats,
             lon=all_lons,
             mode='markers',
-            marker=dict(size=1, color='red', opacity=0.2),
+            marker=dict(size=10, color='red', opacity=1),
             name='Nodos (muestra)',
             showlegend=True
         ))
-
+        """
     return fig, new_show_graph
 
 
