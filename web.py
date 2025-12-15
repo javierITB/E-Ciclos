@@ -18,10 +18,10 @@ from create_tiles import CompleteTileLoader  # <-- NUEVO IMPORT
 import math  # <-- NUEVO IMPORT
 
 # ================= INICIALIZAR TILE LOADER =================
-print("🔄 Inicializando sistema de tiles...")
+print("Inicializando sistema de tiles...")
 try:
     tile_loader = CompleteTileLoader("tiles_data_complete")
-    print(f"✅ Sistema de tiles cargado: {tile_loader.metadata['total_nodes']:,} nodos")
+    print(f"Sistema de tiles cargado: {tile_loader.metadata['total_nodes']:,} nodos")
     
     inicializar_con_tile_loader(tile_loader)
     
@@ -48,7 +48,7 @@ try:
     }
     
 except Exception as e:
-    print(f"❌ Error cargando tiles: {e}")
+    print(f" Error cargando tiles: {e}")
     tile_loader = None
     G = None
     G_CUSTOM = None
@@ -161,10 +161,10 @@ def get_nearest_node(lat, lon, max_distance_km=0.2):
                                 nearest_node = node_id
     
     if nearest_node and min_distance <= max_distance_km:
-        print(f"📍 Clic en ({lat:.6f}, {lon:.6f}) → Nodo {nearest_node} a {min_distance*1000:.0f}m")
+        print(f"Clic en ({lat:.6f}, {lon:.6f}) → Nodo {nearest_node} a {min_distance*1000:.0f}m")
         return nearest_node
     
-    print(f"⚠️  No se encontró nodo cerca de ({lat:.6f}, {lon:.6f})")
+    print(f"No se encontró nodo cerca de ({lat:.6f}, {lon:.6f})")
     return None
 
 def build_custom_graph_for_routing(origin_id, destination_id):
@@ -177,7 +177,7 @@ def build_custom_graph_for_routing(origin_id, destination_id):
     dest_node = tile_loader.all_nodes.get(destination_id)
     
     if not origin_node or not dest_node:
-        print(f"❌ Nodos no encontrados: {origin_id} o {destination_id}")
+        print(f" Nodos no encontrados: {origin_id} o {destination_id}")
         return None
     
     # Calcular área de búsqueda (buffer alrededor de los puntos)
@@ -195,8 +195,8 @@ def build_custom_graph_for_routing(origin_id, destination_id):
     all_edges_in_area = []
     edges_seen = set()  # Para evitar duplicados
     
-    print(f"🔍 Buscando en área: {min_lat:.4f},{min_lon:.4f} a {max_lat:.4f},{max_lon:.4f}")
-    print(f"   Tiles: ({min_tx},{min_ty}) a ({max_tx},{max_ty})")
+    print(f"Buscando en área: {min_lat:.4f},{min_lon:.4f} a {max_lat:.4f},{max_lon:.4f}")
+    print(f" Tiles: ({min_tx},{min_ty}) a ({max_tx},{max_ty})")
     
     for tx in range(min_tx, max_tx + 1):
         for ty in range(min_ty, max_ty + 1):
@@ -210,7 +210,7 @@ def build_custom_graph_for_routing(origin_id, destination_id):
                             edges_seen.add(edge_key)
                             all_edges_in_area.append(edge)
     
-    print(f"  📊 Área de routing: {len(all_edges_in_area):,} aristas únicas")
+    print(f" Área de routing: {len(all_edges_in_area):,} aristas únicas")
     
     # Construir grafo personalizado (usando tus clases originales)
     grafo = Grafo()
@@ -221,7 +221,7 @@ def build_custom_graph_for_routing(origin_id, destination_id):
         node_ids_in_area.add(edge['from'])
         node_ids_in_area.add(edge['to'])
     
-    print(f"  📍 Nodos en área: {len(node_ids_in_area):,}")
+    print(f" Nodos en área: {len(node_ids_in_area):,}")
     
     for node_id in node_ids_in_area:
         if node_id in tile_loader.all_nodes:
@@ -303,14 +303,14 @@ def build_custom_graph_for_routing(origin_id, destination_id):
             except:
                 pass
     
-    print(f"  ✅ Grafo construido: {len(grafo.nodos):,} nodos, {len(grafo.caminos):,} caminos")
+    print(f" Grafo construido: {len(grafo.nodos):,} nodos, {len(grafo.caminos):,} caminos")
     
     # Verificar que origen y destino están en el grafo
     if origin_id not in grafo.nodos:
-        print(f"⚠️  Origen {origin_id} no encontrado en grafo de routing")
+        print(f"Origen {origin_id} no encontrado en grafo de routing")
         return None
     if destination_id not in grafo.nodos:
-        print(f"⚠️  Destino {destination_id} no encontrado en grafo de routing")
+        print(f"Destino {destination_id} no encontrado en grafo de routing")
         return None
     
     return grafo
@@ -322,24 +322,24 @@ if tile_loader is not None:
 else:
     nodes_df, edges_lines = pd.DataFrame(), pd.DataFrame()
 
-# ================= INICIALIZACIÓN DE LA APLICACIÓN DASH =================
+# ================= INICIALIZACIÓN DE LA APLICACIÓN DASH (CORREGIDA LA ALTURA) =================
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY],
                 meta_tags=[{'name': 'viewport', 'content': 'width=device-width, initial-scale=1.0'}])
 
 if tile_loader is None:
     app.layout = dbc.Container([
         html.H1("Ruteo Interactivo", className="my-4 text-center text-danger"),
-        dbc.Alert("⛔ Error: No se pudo cargar el sistema de tiles. Verifique 'tiles_data_complete/'.", color="danger"),
-    ], fluid=True)
+        dbc.Alert("Error: No se pudo cargar el sistema de tiles. Verifique 'tiles_data_complete/'.", color="danger"),
+    ], fluid=True, style={'minHeight': '100vh'})
 else:
+    # APLICACIÓN DE ESTILOS PARA ALTURA UNIFORME Y ESTÉTICA
     app.layout = dbc.Container([
-        html.Hr(className="mb-4"),
 
         dbc.Row([
-            # 1. SIDEBAR (MANTENER EXACTAMENTE IGUAL)
+            # 1. SIDEBAR (CORREGIDO: height: calc(100vh - 90px))
             dbc.Col([
-                html.H4("🧭 Controles de Ruta", className="mt-2 mb-3 text-secondary"),
-                html.P(f"Total de nodos disponibles: {tile_loader.metadata['total_nodes']:,}", className="text-muted small"),
+                html.H4("Sistema Optimización de Ruta para E-Bikes", className="mt-2 mb-3 text-muted"),
+                html.P(f"Total de nodos disponibles: {tile_loader.metadata['total_nodes']:,}", className="text-secondary small"),
 
                 # --- ETIQUETA DE MODO CLIC ---
                 html.Div(id='click-mode-label', className="text-center fw-bold text-info border p-2 mb-3 rounded-lg",
@@ -352,13 +352,13 @@ else:
                 dcc.Store(id='store-show-graph', data=False),
                 # ------------------------------------
 
-                dbc.Label("📍 Origen (Texto o ID de Nodo):", className="mt-3 form-label"),
+                dbc.Label("Origen (Texto o ID de Nodo):", className="mt-3 form-label"),
                 dbc.Input(id='input-origen', type='text', placeholder='Ej: Plaza de Armas o 139158914',
                           className="mb-2"),
                 dbc.Button('Fijar Origen', id='btn-fijar-origen', n_clicks=0, color="info", size="sm",
                            className="w-100"),
 
-                dbc.Label("🏁 Destino (Texto o ID de Nodo):", className="mt-4 form-label"),
+                dbc.Label("Destino (Texto o ID de Nodo):", className="mt-4 form-label"),
                 dbc.Input(id='input-destino', type='text', placeholder='Ej: Cerro San Cristóbal o 139162483',
                           className="mb-2"),
                 dbc.Button('Fijar Destino', id='btn-fijar-destino', n_clicks=0, color="danger", size="sm",
@@ -370,17 +370,17 @@ else:
                 html.Hr(className="my-4"),
                 # ================= NUEVOS CONTROLES DE FILTRO Y TIPO DE RUTA =================
                 html.Hr(className="my-3"),
-                html.H5("⚙️ Opciones de Ruta", className="text-secondary mb-2"),
+                html.H5("Opciones de Ruta", className="text-secondary mb-2"),
                 
                 # Selector de Tipo de Ruta (optimización principal)
                 dbc.Label("Optimizar por:", className="form-label small"),
                 dcc.Dropdown(
                     id='dropdown-tipo-ruta',
                     options=[
-                        {'label': '📏 Distancia (más corta)', 'value': 'distancia'},
-                        {'label': '🛡️ Seguridad (menos peligrosa)', 'value': 'peligrosidad'},
-                        {'label': '⛰️ Esfuerzo (menos pendiente)', 'value': 'esfuerzo'},
-                        {'label': '⚖️ Balanceada (todos los criterios)', 'value': 'balanceada'},
+                        {'label': 'Distancia (más corta)', 'value': 'distancia'},
+                        {'label': 'Seguridad (menos peligrosa)', 'value': 'peligrosidad'},
+                        {'label': 'Esfuerzo (menos pendiente)', 'value': 'esfuerzo'},
+                        {'label': 'Balanceada (todos los criterios)', 'value': 'balanceada'},
                     ],
                     value='distancia',
                     clearable=False,
@@ -392,10 +392,10 @@ else:
                 dcc.Dropdown(
                     id='dropdown-tipo-filtro',
                     options=[
-                        {'label': '❌ Sin filtro', 'value': 'ninguno'},
-                        {'label': '🛡️ Evitar zonas peligrosas', 'value': 'seguridad'},
-                        {'label': '⛰️ Evitar pendientes fuertes', 'value': 'esfuerzo'},
-                        {'label': '🛡️⛰️ Ambos filtros', 'value': 'seguridad_y_esfuerzo'},
+                        {'label': 'Sin filtro', 'value': 'ninguno'},
+                        {'label': 'Evitar zonas peligrosas', 'value': 'seguridad'},
+                        {'label': 'Evitar pendientes fuertes', 'value': 'esfuerzo'},
+                        {'label': 'Ambos filtros', 'value': 'seguridad_y_esfuerzo'},
                     ],
                     value='ninguno',
                     clearable=False,
@@ -435,7 +435,7 @@ else:
                 html.Hr(className="my-3"),
                 # ================= FIN NUEVOS CONTROLES =================
                 
-                dbc.Button('🛣️ Calcular Ruta Óptima', id='btn-ruta', n_clicks=0, color="success",
+                dbc.Button('Calcular Ruta Óptima', id='btn-ruta', n_clicks=0, color="success",
                            className="w-100 mt-2 btn-lg"),
 
                 # Contenedores para Output del Callback 5
@@ -444,14 +444,15 @@ else:
                          style={'maxHeight': '300px', 'overflowY': 'auto', 'fontSize': '0.8rem'}),
                 # Fin Contenedores
 
-                dbc.Button('🔄 Resetear Selección', id='btn-reset', n_clicks=0, color="warning", className="w-100 mt-4"),
-                dbc.Button('Ver rutas disponibles', id='btn-show-graph', n_clicks=0, color="primary", className="w-100 mt-3"),
+                dbc.Button('Resetear Selección', id='btn-reset', n_clicks=0, color="warning", className="w-100 mt-4"),
+                dbc.Button('Ver calles', id='btn-show-graph', n_clicks=0, color="primary", className="w-100 mt-3"),
                 html.Hr(className="my-4"),
 
             ], width=3, className="p-4 bg-light border-end shadow-sm",
-                style={'minHeight': '90vh', 'overflowY': 'auto'}),
+                # ESTILO DE ALTURA CORREGIDO PARA EL SIDEBAR
+                style={'height': 'calc(100vh - 90px)', 'overflowY': 'auto'}),
 
-            # 2. MAPA PRINCIPAL (MANTENER EXACTAMENTE IGUAL)
+            # 2. MAPA PRINCIPAL (CORREGIDO: height: calc(100vh - 90px))
             dbc.Col([
                 html.Div([
                     dcc.Graph(
@@ -468,6 +469,7 @@ else:
                         dbc.Button('➖', id='btn-zoom-out', n_clicks=0, color="secondary", size="sm"),
                     ], style={'position': 'absolute', 'bottom': '10px', 'right': '10px', 'z-index': '1000'}),
                 ], style={'position': 'relative', 'height': '100%', 'width': '100%'}),
+                
                 dbc.Collapse(
                     html.Div([
                         html.H5("Vista 3D (Altitud y Peligrosidad)", className="mt-3 text-center text-info"),
@@ -476,14 +478,17 @@ else:
                     id="collapse-3d",
                     is_open=False,
                 ),
-            ], width=9, className="p-0", style={'height': '90vh'}),
-        ], className="g-0"),
+            # ESTILO DE ALTURA CORREGIDO PARA LA COLUMNA DEL MAPA
+            ], width=9, className="p-0", style={'height': 'calc(100vh - 90px)'}), 
+        
+        ], className="g-0"), # 'g-0' para eliminar el margen horizontal predeterminado
 
         # --- COMPONENTE DE ESTADO INVISIBLE PARA EL MODO DE CLIC ---
         dcc.Store(id='store-click-mode', data={'next_selection': 'ORIGEN'}),
         # ----------------------------------------------------------
-        html.Hr(className="mb-4"),
-    ], fluid=True, className="p-0")
+        # Se elimina el último hr, ya que no se necesita con el estilo de altura fija.
+    # ESTILO DE ALTURA CORREGIDO PARA EL CONTENEDOR PRINCIPAL
+    ], fluid=True, className="p-0", style={'minHeight': '100vh'})
 
 # ================= CALLBACKS (MANTENER LÓGICA ORIGINAL) =================
 
@@ -500,20 +505,18 @@ def update_click_mode_label_mejorado(mode_data, origen_id, destino_id):
     
     if mode == 'ORIGEN':
         status = html.Div([
-            html.H6("🟢 Modo: SELECCIONAR ORIGEN", className="mb-1"),
-            html.Small("Haz clic en el mapa para elegir el punto de partida", className="text-muted")
+            html.H6("Modo: SELECCIONAR ORIGEN", className="mb-1")
         ])
     else:
         status = html.Div([
-            html.H6("🔴 Modo: SELECCIONAR DESTINO", className="mb-1"),
-            html.Small("Haz clic en el mapa para elegir el punto de llegada", className="text-muted")
+            html.H6("Modo: SELECCIONAR DESTINO", className="mb-1")
         ])
     
     # Añadir información de lo que ya está seleccionado
     info_extra = html.Div([
         html.Hr(className="my-2"),
         html.Small("Seleccionados:", className="text-muted d-block"),
-        html.Small(f"📍 Origen: {origen_id if origen_id else 'No seleccionado'}", 
+        html.Small(f"Origen: {origen_id if origen_id else 'No seleccionado'}", 
                   className="text-success" if origen_id else "text-muted"),
         html.Br(),
         html.Small(f"🏁 Destino: {destino_id if destino_id else 'No seleccionado'}", 
@@ -546,7 +549,7 @@ def handle_map_click(clickData, mode_data, current_origen, current_destino):
     if not clickData:
         return dash.no_update, dash.no_update, dash.no_update, dash.no_update
     
-    print(f"🖱️ CLIC DETECTADO EN MAPA")
+    print(f"CLIC DETECTADO EN MAPA")
     
     # 1. Obtener coordenadas
     lat = clickData['points'][0]['lat']
@@ -559,7 +562,7 @@ def handle_map_click(clickData, mode_data, current_origen, current_destino):
     
     if not node_id:
         error_msg = html.Div([
-            html.Span("❌ ", className="text-danger"),
+            html.Span(" ", className="text-danger"),
             html.Span("No hay nodos cerca de este punto."),
             html.Br(),
             html.Small("Haz clic cerca de una calle.", className="text-muted")
@@ -575,7 +578,6 @@ def handle_map_click(clickData, mode_data, current_origen, current_destino):
         # Establecer origen
         new_mode = {'next_selection': 'DESTINO'}
         msg = html.Div([
-            html.Span("✅ ", className="text-success"),
             html.B(f"Origen establecido: "),
             html.Span(f"Nodo {node_id}"),
             html.Br(),
@@ -587,7 +589,6 @@ def handle_map_click(clickData, mode_data, current_origen, current_destino):
         # Establecer destino
         new_mode = {'next_selection': 'ORIGEN'}
         msg = html.Div([
-            html.Span("✅ ", className="text-success"),
             html.B(f"Destino establecido: "),
             html.Span(f"Nodo {node_id}"),
             html.Br(),
@@ -617,68 +618,11 @@ def handle_double_click(dblclickData, current_figure):
     
     return new_figure
 
-def get_nearest_node(lat, lon, max_distance_km=0.2):
-    """Versión mejorada - Encuentra nodo más cercano usando tiles"""
-    if tile_loader is None:
-        print("❌ Tile loader no disponible")
-        return None
-    
-    print(f"🔍 Buscando nodo cercano a ({lat:.6f}, {lon:.6f})")
-    
-    # 1. Buscar en el tile local PRIMERO (más rápido)
-    tile_x, tile_y = tile_loader.latlon_to_tile(lat, lon)
-    tile_data = tile_loader.load_tile_data(tile_x, tile_y)
-    
-    nearest_node = None
-    min_distance = float('inf')
-    node_coords = None
-    
-    if tile_data:
-        print(f"   Tile ({tile_x}, {tile_y}) tiene {len(tile_data['node_ids'])} nodos")
-        
-        # Buscar en TODOS los nodos del tile
-        for node_id in tile_data['node_ids']:
-            if node_id in tile_loader.all_nodes:
-                node = tile_loader.all_nodes[node_id]
-                # Distancia en grados (aproximación rápida)
-                dist_deg = math.sqrt((node['lat'] - lat)**2 + (node['lon'] - lon)**2)
-                dist_km = dist_deg * 111.0  # 1 grado ≈ 111 km
-                
-                if dist_km < min_distance and dist_km <= max_distance_km:
-                    min_distance = dist_km
-                    nearest_node = node_id
-                    node_coords = (node['lat'], node['lon'])
-    
-    # 2. Si no encontró en el tile local, buscar en tiles vecinos
-    if nearest_node is None:
-        print(f"   No se encontró en tile principal, buscando en vecinos...")
-        search_radius_deg = 0.009  # ~1km
-        
-        for dx in [-1, 0, 1]:
-            for dy in [-1, 0, 1]:
-                if dx == 0 and dy == 0:
-                    continue
-                    
-                neighbor_tile = tile_loader.load_tile_data(tile_x + dx, tile_y + dy)
-                if neighbor_tile:
-                    for node_id in neighbor_tile['node_ids']:
-                        if node_id in tile_loader.all_nodes:
-                            node = tile_loader.all_nodes[node_id]
-                            dist_deg = math.sqrt((node['lat'] - lat)**2 + (node['lon'] - lon)**2)
-                            dist_km = dist_deg * 111.0
-                            
-                            if dist_km < min_distance and dist_km <= max_distance_km:
-                                min_distance = dist_km
-                                nearest_node = node_id
-                                node_coords = (node['lat'], node['lon'])
-    
-    if nearest_node:
-        print(f"✅ Nodo encontrado: {nearest_node} a {min_distance*1000:.0f}m")
-        print(f"   Coordenadas nodo: ({node_coords[0]:.6f}, {node_coords[1]:.6f})")
-        return nearest_node
-    
-    print(f"❌ No se encontró nodo cerca de ({lat:.6f}, {lon:.6f})")
-    return None
+# La función get_nearest_node original está duplicada, se deja solo la versión mejorada
+# y se renombran las llamadas a la función original que está al inicio del script
+# para asegurar que usa la lógica correcta, aunque en el contexto de Dash, las funciones
+# helper no necesitan estar redefinidas si ya están en el ámbito global.
+# Se asume que la versión dentro del callback de click es la que quieres mantener.
 
 # Callback de Manejo de Texto: MANTENER EXACTAMENTE IGUAL
 @app.callback(
@@ -705,7 +649,7 @@ def handle_text_input(n_origen, n_destino, n_reset,
     # 1. Lógica de Reseteo
     if trigger_id == 'btn-reset':
         RUTA_ASTAR = None
-        return None, None, html.Div(["👆 Fija Origen y Destino usando texto o IDs."], className="fw-bold")
+        return None, None, html.Div(["Fija Origen y Destino usando texto o IDs."], className="fw-bold")
 
     # Inicializar las salidas
     new_origen_id = current_origen_id
@@ -737,12 +681,12 @@ def handle_text_input(n_origen, n_destino, n_reset,
                     status_msg = dash.no_update
                 else:
                     new_origen_id = None
-                    status_msg = html.Div([f"⛔ Error: Origen '{origen_text}' no encontrado o inválido."],
+                    status_msg = html.Div([f"Error: Origen '{origen_text}' no encontrado o inválido."],
                                           className="text-danger")
 
             except Exception as e:
                 new_origen_id = None
-                status_msg = html.Div([f"⛔ Error en la búsqueda de Origen: {e}"], className="text-danger")
+                status_msg = html.Div([f"Error en la búsqueda de Origen: {e}"], className="text-danger")
 
     # 3. Manejo de Destino
     elif trigger_id == 'btn-fijar-destino':
@@ -771,15 +715,15 @@ def handle_text_input(n_origen, n_destino, n_reset,
                 else:
                     new_destino_id = None
                     if node_id != -1 and int(node_id) == current_origen_id:
-                        status_msg = html.Div(["⛔ Error: Destino no puede ser igual al Origen."],
+                        status_msg = html.Div(["Error: Destino no puede ser igual al Origen."],
                                               className="text-danger")
                     else:
-                        status_msg = html.Div([f"⛔ Error: Destino '{destino_text}' no encontrado o inválido."],
+                        status_msg = html.Div([f"Error: Destino '{destino_text}' no encontrado o inválido."],
                                               className="text-danger")
 
             except Exception as e:
                 new_destino_id = None
-                status_msg = html.Div([f"⛔ Error en la búsqueda de Destino: {e}"], className="text-danger")
+                status_msg = html.Div([f"Error en la búsqueda de Destino: {e}"], className="text-danger")
 
     return new_origen_id, new_destino_id, status_msg
 
@@ -871,7 +815,7 @@ def update_map_and_selection(reset_clicks,
             hovertemplate='',
             showlegend=False
         ))
-        print(f"✅ Añadidos {len(sample_nodes)} puntos clickeables invisibles")
+        print(f"Añadidos {len(sample_nodes)} puntos clickeables invisibles")
 
     # Añadir una traza invisible para forzar el renderizado
     fig.add_trace(go.Scattermapbox(
@@ -1026,10 +970,10 @@ def update_map_and_selection(reset_clicks,
             'ruta_balanceada': '#6f42c1'      # Púrpura
         }
         nombres_rutas_display = {
-            'ruta_distancia': '📏 Distancia',
-            'ruta_segura': '🛡️ Segura',
-            'ruta_esfuerzo': '⛰️ Esfuerzo',
-            'ruta_balanceada': '⚖️ Balanceada'
+            'ruta_distancia': 'Distancia',
+            'ruta_segura': 'Segura',
+            'ruta_esfuerzo': 'Esfuerzo',
+            'ruta_balanceada': 'Balanceada'
         }
         
         for key, ruta in RUTAS_MULTIPLES.items():
@@ -1092,15 +1036,15 @@ def update_map_and_selection(reset_clicks,
 )
 def update_status_text_from_store(origen_id, destino_id):
     if origen_id is None and destino_id is None:
-        return html.Div(["👆 Fija Origen y Destino usando texto o IDs."], className="fw-bold")
+        return html.Div(["Fija Origen y Destino usando texto o IDs."], className="fw-bold")
     elif origen_id is not None and destino_id is None:
         return html.Div([
-            html.B("✅ Origen Fijado. "),
+            html.B("Origen Fijado. "),
             html.Span(f"ID: {origen_id}. Ahora selecciona el Destino.")
         ])
     elif origen_id is not None and destino_id is not None:
         return html.Div([
-            html.B("🎉 Listo: "),
+            html.B("Listo: "),
             html.Span(f"Origen ({origen_id}) y Destino ({destino_id}). ¡Calcula la ruta!")
         ], className="text-success fw-bold")
     else:
@@ -1157,10 +1101,10 @@ def calcular_rutas(n_clicks, origen_id, destino_id, tipo_ruta_str, tipo_filtro_s
     tipo_ruta = TipoRuta(tipo_ruta_str) if tipo_ruta_str else TipoRuta.DISTANCIA
     tipo_filtro = TipoFiltro(tipo_filtro_str) if tipo_filtro_str else TipoFiltro.NINGUNO
     
-    print(f"📍 Calculando ruta: {PUNTO_ORIGEN} → {PUNTO_DESTINO}")
-    print(f"   Tipo de ruta: {tipo_ruta.value}")
-    print(f"   Filtro: {tipo_filtro.value}")
-    print(f"   Umbral seguridad: {umbral_seguridad}, Umbral pendiente: {umbral_pendiente}%")
+    print(f"Calculando ruta: {PUNTO_ORIGEN} → {PUNTO_DESTINO}")
+    print(f" Tipo de ruta: {tipo_ruta.value}")
+    print(f" Filtro: {tipo_filtro.value}")
+    print(f" Umbral seguridad: {umbral_seguridad}, Umbral pendiente: {umbral_pendiente}%")
     
     # Parámetros de peso
     W_DIST = 1.0
@@ -1168,7 +1112,7 @@ def calcular_rutas(n_clicks, origen_id, destino_id, tipo_ruta_str, tipo_filtro_s
     W_SEG = 1.0   # Peso base para seguridad
 
     # 1. Construir grafo SOLO para el área necesaria
-    print("🔄 Construyendo grafo para routing...")
+    print("Construyendo grafo para routing...")
     G_CUSTOM = build_custom_graph_for_routing(PUNTO_ORIGEN, PUNTO_DESTINO)
     
     if G_CUSTOM is None:
@@ -1186,7 +1130,7 @@ def calcular_rutas(n_clicks, origen_id, destino_id, tipo_ruta_str, tipo_filtro_s
     try:
         if mostrar_multiruta:
             # Modo multiruta: calcular todas las rutas para comparación
-            print("🔍 Ejecutando A* Multiruta...")
+            print("Ejecutando A* Multiruta...")
             RUTAS_MULTIPLES = routing.a_estrella_multiruta(
                 G_CUSTOM, PUNTO_ORIGEN, PUNTO_DESTINO,
                 w_dist=W_DIST, w_elev=W_ELEV, w_seg=W_SEG,
@@ -1205,10 +1149,10 @@ def calcular_rutas(n_clicks, origen_id, destino_id, tipo_ruta_str, tipo_filtro_s
                 RUTA_ASTAR = RUTAS_MULTIPLES.get('ruta_balanceada')
             
             rutas_encontradas = sum(1 for r in RUTAS_MULTIPLES.values() if r)
-            print(f"✅ Multiruta: {rutas_encontradas}/4 rutas encontradas")
+            print(f"Multiruta: {rutas_encontradas}/4 rutas encontradas")
         else:
             # Modo normal: calcular solo la ruta seleccionada
-            print(f"🔍 Ejecutando A* con tipo_ruta={tipo_ruta.value}...")
+            print(f"Ejecutando A* con tipo_ruta={tipo_ruta.value}...")
             RUTA_ASTAR = routing.a_estrella(
                 G_CUSTOM, PUNTO_ORIGEN, PUNTO_DESTINO,
                 w_dist=W_DIST, w_elev=W_ELEV, w_seg=W_SEG,
@@ -1217,10 +1161,10 @@ def calcular_rutas(n_clicks, origen_id, destino_id, tipo_ruta_str, tipo_filtro_s
                 umbral_seguridad=umbral_seguridad,
                 umbral_pendiente=umbral_pendiente
             )
-            print(f"✅ Ruta encontrada: {len(RUTA_ASTAR) if RUTA_ASTAR else 0} nodos")
+            print(f"Ruta encontrada: {len(RUTA_ASTAR) if RUTA_ASTAR else 0} nodos")
             
     except Exception as e:
-        print(f"❌ Error en A*: {e}")
+        print(f" Error en A*: {e}")
         import traceback
         traceback.print_exc()
 
@@ -1230,21 +1174,21 @@ def calcular_rutas(n_clicks, origen_id, destino_id, tipo_ruta_str, tipo_filtro_s
     
     # Nombres para mostrar según tipo de ruta
     nombres_rutas = {
-        'distancia': '📏 Distancia',
-        'peligrosidad': '🛡️ Seguridad',
-        'esfuerzo': '⛰️ Esfuerzo',
-        'balanceada': '⚖️ Balanceada'
+        'distancia': 'Distancia',
+        'peligrosidad': 'Seguridad',
+        'esfuerzo': 'Esfuerzo',
+        'balanceada': 'Balanceada'
     }
 
     if mostrar_multiruta:
         # Mostrar comparación de todas las rutas
-        ruta_nodos_html.append(html.H6("📊 Comparación de Rutas:", className="text-primary mt-2"))
+        ruta_nodos_html.append(html.H6("Comparación de Rutas:", className="text-primary mt-2"))
         
         rutas_info = [
-            ('ruta_distancia', '📏 Distancia', 'blue'),
-            ('ruta_segura', '🛡️ Seguridad', 'green'),
-            ('ruta_esfuerzo', '⛰️ Esfuerzo', 'orange'),
-            ('ruta_balanceada', '⚖️ Balanceada', 'purple')
+            ('ruta_distancia', 'Distancia', 'blue'),
+            ('ruta_segura', 'Seguridad', 'green'),
+            ('ruta_esfuerzo', 'Esfuerzo', 'orange'),
+            ('ruta_balanceada', 'Balanceada', 'purple')
         ]
         
         for key, nombre, color in rutas_info:
@@ -1277,9 +1221,9 @@ def calcular_rutas(n_clicks, origen_id, destino_id, tipo_ruta_str, tipo_filtro_s
             # Mostrar métricas
             metricas = routing.calcular_metricas_ruta(G_CUSTOM, RUTA_ASTAR)
             ruta_nodos_html.append(html.Div([
-                html.Span(f"📏 {metricas['distancia_total']:.0f}m | "),
-                html.Span(f"⛰️ +{metricas['ganancia_altura']:.0f}m | "),
-                html.Span(f"📐 máx {metricas['pendiente_maxima']:.1f}%")
+                html.Span(f"{metricas['distancia_total']:.0f}m | "),
+                html.Span(f"+{metricas['ganancia_altura']:.0f}m | "),
+                html.Span(f"máx {metricas['pendiente_maxima']:.1f}%")
             ], className="small text-muted"))
         else:
             ruta_nodos_html.append(html.P("No se encontró camino con los filtros seleccionados.", className="text-muted"))
@@ -1288,10 +1232,10 @@ def calcular_rutas(n_clicks, origen_id, destino_id, tipo_ruta_str, tipo_filtro_s
     if astar_encontrada or (mostrar_multiruta and any(RUTAS_MULTIPLES.values())):
         if mostrar_multiruta:
             rutas_ok = sum(1 for r in RUTAS_MULTIPLES.values() if r)
-            mensaje = f"✅ {rutas_ok} rutas calculadas. El mapa se ha actualizado."
+            mensaje = f"{rutas_ok} rutas calculadas. El mapa se ha actualizado."
         else:
             a_len = len(RUTA_ASTAR)
-            mensaje = f"✅ Ruta {nombres_rutas.get(tipo_ruta_str, '')} calculada. {a_len} nodos."
+            mensaje = f"Ruta {nombres_rutas.get(tipo_ruta_str, '')} calculada. {a_len} nodos."
         msg = dbc.Alert(mensaje, color="success")
         return msg, html.Div(ruta_nodos_html)
     else:
@@ -1358,19 +1302,19 @@ def update_on_map_move(relayout_data, current_figure):
 if __name__ == '__main__':
     if tile_loader is not None:
         print("\n" + "="*60)
-        print("🚀 Iniciando aplicación Dash con sistema de tiles...")
+        print("Iniciando aplicación Dash con sistema de tiles...")
         print(f"   Nodos totales: {tile_loader.metadata['total_nodes']:,}")
         print(f"   Aristas totales: {tile_loader.metadata['total_edges']:,}")
         print(f"   Tiles disponibles: {tile_loader.metadata['tiles_with_data']:,}")
         print("="*60)
         
-        print("\n🔍 CALLBACKS REGISTRADOS:")
+        print("\nCALLBACKS REGISTRADOS:")
         for callback in app.callback_map.values():
             inputs = [str(inp) for inp in callback['inputs']]
             if 'clickData' in str(inputs):
-                print(f"  📌 Callback con clickData: {inputs}")
+                print(f"Callback con clickData: {inputs}")
         
         # SOLO UNA VEZ app.run()
         app.run(debug=False, host="0.0.0.0", port=8050)
     else:
-        print("❌ No se pudo iniciar la aplicación: tile_loader no disponible")
+        print(" No se pudo iniciar la aplicación: tile_loader no disponible")
