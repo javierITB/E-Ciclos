@@ -11,6 +11,7 @@ import random
 import plotly.graph_objects as go
 from typing import List, Optional
 import routing
+from routing import TipoFiltro, TipoRuta  # <-- NUEVO: Enums para filtros y tipos de ruta
 from grafo import Grafo
 from string_to_node import texto_a_nodo, inicializar_con_tile_loader
 from create_tiles import CompleteTileLoader  # <-- NUEVO IMPORT
@@ -30,6 +31,14 @@ try:
     PUNTO_ORIGEN = None
     PUNTO_DESTINO = None
     RUTA_ASTAR = None
+    
+    # NUEVO: Variables para múltiples rutas
+    RUTAS_MULTIPLES = {
+        'ruta_distancia': None,
+        'ruta_segura': None,
+        'ruta_esfuerzo': None,
+        'ruta_balanceada': None
+    }
     
     # Variables de vista actual
     CURRENT_VIEWPORT = {
@@ -359,6 +368,73 @@ else:
                 dbc.Alert(id="selection-status", color="light", className="text-center mt-3 py-2",
                           children="Fija Origen y Destino usando texto o IDs."),
                 html.Hr(className="my-4"),
+                # ================= NUEVOS CONTROLES DE FILTRO Y TIPO DE RUTA =================
+                html.Hr(className="my-3"),
+                html.H5("⚙️ Opciones de Ruta", className="text-secondary mb-2"),
+                
+                # Selector de Tipo de Ruta (optimización principal)
+                dbc.Label("Optimizar por:", className="form-label small"),
+                dcc.Dropdown(
+                    id='dropdown-tipo-ruta',
+                    options=[
+                        {'label': '📏 Distancia (más corta)', 'value': 'distancia'},
+                        {'label': '🛡️ Seguridad (menos peligrosa)', 'value': 'peligrosidad'},
+                        {'label': '⛰️ Esfuerzo (menos pendiente)', 'value': 'esfuerzo'},
+                        {'label': '⚖️ Balanceada (todos los criterios)', 'value': 'balanceada'},
+                    ],
+                    value='distancia',
+                    clearable=False,
+                    className="mb-2"
+                ),
+                
+                # Selector de Filtros adicionales
+                dbc.Label("Filtros adicionales:", className="form-label small mt-2"),
+                dcc.Dropdown(
+                    id='dropdown-tipo-filtro',
+                    options=[
+                        {'label': '❌ Sin filtro', 'value': 'ninguno'},
+                        {'label': '🛡️ Evitar zonas peligrosas', 'value': 'seguridad'},
+                        {'label': '⛰️ Evitar pendientes fuertes', 'value': 'esfuerzo'},
+                        {'label': '🛡️⛰️ Ambos filtros', 'value': 'seguridad_y_esfuerzo'},
+                    ],
+                    value='ninguno',
+                    clearable=False,
+                    className="mb-2"
+                ),
+                
+                # Checkbox para mostrar múltiples rutas
+                dbc.Checkbox(
+                    id='check-multiruta',
+                    label="Mostrar comparación de rutas",
+                    value=False,
+                    className="mt-2 mb-3"
+                ),
+                
+                # Slider para umbral de seguridad (visible solo con filtro seguridad)
+                html.Div([
+                    dbc.Label("Umbral de seguridad (0-1):", className="form-label small"),
+                    dcc.Slider(
+                        id='slider-umbral-seguridad',
+                        min=0.1, max=1.0, step=0.1, value=0.5,
+                        marks={0.1: '0.1', 0.5: '0.5', 1.0: '1.0'},
+                        tooltip={"placement": "bottom", "always_visible": False}
+                    ),
+                ], id='div-umbral-seguridad', style={'display': 'none'}),
+                
+                # Slider para umbral de pendiente (visible solo con filtro esfuerzo)
+                html.Div([
+                    dbc.Label("Pendiente máxima (%):", className="form-label small"),
+                    dcc.Slider(
+                        id='slider-umbral-pendiente',
+                        min=2, max=15, step=1, value=8,
+                        marks={2: '2%', 8: '8%', 15: '15%'},
+                        tooltip={"placement": "bottom", "always_visible": False}
+                    ),
+                ], id='div-umbral-pendiente', style={'display': 'none'}),
+                
+                html.Hr(className="my-3"),
+                # ================= FIN NUEVOS CONTROLES =================
+                
                 dbc.Button('🛣️ Calcular Ruta Óptima', id='btn-ruta', n_clicks=0, color="success",
                            className="w-100 mt-2 btn-lg"),
 
@@ -940,7 +1016,37 @@ def update_map_and_selection(reset_clicks,
                     showlegend=True
                 ))
 
-    dibujar_ruta(RUTA_ASTAR, "Ruta A* (Heurística)", "orange", 1.0)
+    # NUEVO: Dibujar múltiples rutas si están disponibles
+    if RUTAS_MULTIPLES and any(RUTAS_MULTIPLES.values()):
+        # Colores para cada tipo de ruta
+        colores_rutas = {
+            'ruta_distancia': '#007bff',      # Azul
+            'ruta_segura': '#28a745',         # Verde
+            'ruta_esfuerzo': '#fd7e14',       # Naranja
+            'ruta_balanceada': '#6f42c1'      # Púrpura
+        }
+        nombres_rutas_display = {
+            'ruta_distancia': '📏 Distancia',
+            'ruta_segura': '🛡️ Segura',
+            'ruta_esfuerzo': '⛰️ Esfuerzo',
+            'ruta_balanceada': '⚖️ Balanceada'
+        }
+        
+        for key, ruta in RUTAS_MULTIPLES.items():
+            if ruta:
+                # La ruta principal (RUTA_ASTAR) se dibuja más gruesa
+                es_principal = (ruta == RUTA_ASTAR)
+                ancho = 6 if es_principal else 3
+                opacidad_linea = 1.0 if es_principal else 0.6
+                dibujar_ruta(
+                    ruta, 
+                    nombres_rutas_display.get(key, key), 
+                    colores_rutas.get(key, 'gray'),
+                    opacidad_linea
+                )
+    else:
+        # Modo normal: solo dibujar RUTA_ASTAR
+        dibujar_ruta(RUTA_ASTAR, "Ruta A* (Heurística)", "orange", 1.0)
 
     # 9. Dibujar nodos intermedios de rutas
     def dibujar_nodos_ruta(ruta_nodos: Optional[List[int]], nombre: str, color: str):
@@ -1000,17 +1106,45 @@ def update_status_text_from_store(origen_id, destino_id):
     else:
         return html.Div(["Fija Origen y Destino usando texto o IDs."], className="fw-bold")
 
-# Callback para calcular rutas: VERSIÓN OPTIMIZADA
+# ================= NUEVO CALLBACK: Mostrar/ocultar sliders de filtros =================
+@app.callback(
+    [Output('div-umbral-seguridad', 'style'),
+     Output('div-umbral-pendiente', 'style')],
+    [Input('dropdown-tipo-filtro', 'value')]
+)
+def toggle_filter_sliders(tipo_filtro):
+    """Muestra/oculta los sliders según el filtro seleccionado"""
+    show_seguridad = {'display': 'block'} if tipo_filtro in ['seguridad', 'seguridad_y_esfuerzo'] else {'display': 'none'}
+    show_pendiente = {'display': 'block'} if tipo_filtro in ['esfuerzo', 'seguridad_y_esfuerzo'] else {'display': 'none'}
+    return show_seguridad, show_pendiente
+
+# Callback para calcular rutas: VERSIÓN MEJORADA CON FILTROS Y MULTIRUTA
 @app.callback(
     [Output('ruta-output', 'children'),
      Output('ruta-nodos-list', 'children')],
     [Input('btn-ruta', 'n_clicks')],
     [State('store-origen-id', 'data'),
-     State('store-destino-id', 'data')],
+     State('store-destino-id', 'data'),
+     State('dropdown-tipo-ruta', 'value'),
+     State('dropdown-tipo-filtro', 'value'),
+     State('check-multiruta', 'value'),
+     State('slider-umbral-seguridad', 'value'),
+     State('slider-umbral-pendiente', 'value')],
     prevent_initial_call=True
 )
-def calcular_rutas(n_clicks, origen_id, destino_id):
-    global RUTA_ASTAR, PUNTO_ORIGEN, PUNTO_DESTINO, G_CUSTOM
+def calcular_rutas(n_clicks, origen_id, destino_id, tipo_ruta_str, tipo_filtro_str, 
+                   mostrar_multiruta, umbral_seguridad, umbral_pendiente):
+    """
+    Callback mejorado para calcular rutas con filtros y opciones de optimización.
+    
+    Parámetros:
+        tipo_ruta_str: 'distancia', 'peligrosidad', 'esfuerzo', 'balanceada'
+        tipo_filtro_str: 'ninguno', 'seguridad', 'esfuerzo', 'seguridad_y_esfuerzo'
+        mostrar_multiruta: Si True, calcula y muestra comparación de rutas
+        umbral_seguridad: Umbral para filtro de seguridad (0.1-1.0)
+        umbral_pendiente: Pendiente máxima permitida en % (2-15)
+    """
+    global RUTA_ASTAR, PUNTO_ORIGEN, PUNTO_DESTINO, G_CUSTOM, RUTAS_MULTIPLES
 
     # Actualizar globales
     PUNTO_ORIGEN = origen_id
@@ -1019,12 +1153,19 @@ def calcular_rutas(n_clicks, origen_id, destino_id):
     if PUNTO_ORIGEN is None or PUNTO_DESTINO is None:
         return dbc.Alert("Seleccione Origen y Destino válidos antes de calcular.", color="danger"), None
 
-    print(f"📍 Calculando ruta: {PUNTO_ORIGEN} → {PUNTO_DESTINO}")
+    # Convertir strings a enums
+    tipo_ruta = TipoRuta(tipo_ruta_str) if tipo_ruta_str else TipoRuta.DISTANCIA
+    tipo_filtro = TipoFiltro(tipo_filtro_str) if tipo_filtro_str else TipoFiltro.NINGUNO
     
-    # Parámetros de peso (mantener igual)
+    print(f"📍 Calculando ruta: {PUNTO_ORIGEN} → {PUNTO_DESTINO}")
+    print(f"   Tipo de ruta: {tipo_ruta.value}")
+    print(f"   Filtro: {tipo_filtro.value}")
+    print(f"   Umbral seguridad: {umbral_seguridad}, Umbral pendiente: {umbral_pendiente}%")
+    
+    # Parámetros de peso
     W_DIST = 1.0
-    W_ELEV = 0.0
-    W_SEG = 1000.0
+    W_ELEV = 0.5  # Ahora consideramos elevación
+    W_SEG = 1.0   # Peso base para seguridad
 
     # 1. Construir grafo SOLO para el área necesaria
     print("🔄 Construyendo grafo para routing...")
@@ -1033,37 +1174,128 @@ def calcular_rutas(n_clicks, origen_id, destino_id):
     if G_CUSTOM is None:
         return dbc.Alert("No se pudo construir el grafo para la ruta seleccionada.", color="danger"), None
 
-    # 2. Ejecutar A*
+    # 2. Ejecutar cálculo de rutas
     RUTA_ASTAR = None
+    RUTAS_MULTIPLES = {
+        'ruta_distancia': None,
+        'ruta_segura': None,
+        'ruta_esfuerzo': None,
+        'ruta_balanceada': None
+    }
+    
     try:
-        print("🔍 Ejecutando A*...")
-        RUTA_ASTAR = routing.a_estrella(G_CUSTOM, PUNTO_ORIGEN, PUNTO_DESTINO,
-                                        w_dist=W_DIST, w_elev=W_ELEV, w_seg=W_SEG)
-        print(f"✅ Ruta encontrada: {len(RUTA_ASTAR) if RUTA_ASTAR else 0} nodos")
+        if mostrar_multiruta:
+            # Modo multiruta: calcular todas las rutas para comparación
+            print("🔍 Ejecutando A* Multiruta...")
+            RUTAS_MULTIPLES = routing.a_estrella_multiruta(
+                G_CUSTOM, PUNTO_ORIGEN, PUNTO_DESTINO,
+                w_dist=W_DIST, w_elev=W_ELEV, w_seg=W_SEG,
+                tipo_filtro=tipo_filtro,
+                umbral_seguridad=umbral_seguridad,
+                umbral_pendiente=umbral_pendiente
+            )
+            # La ruta principal será la del tipo seleccionado
+            if tipo_ruta == TipoRuta.DISTANCIA:
+                RUTA_ASTAR = RUTAS_MULTIPLES.get('ruta_distancia')
+            elif tipo_ruta == TipoRuta.PELIGROSIDAD:
+                RUTA_ASTAR = RUTAS_MULTIPLES.get('ruta_segura')
+            elif tipo_ruta == TipoRuta.ESFUERZO:
+                RUTA_ASTAR = RUTAS_MULTIPLES.get('ruta_esfuerzo')
+            else:
+                RUTA_ASTAR = RUTAS_MULTIPLES.get('ruta_balanceada')
+            
+            rutas_encontradas = sum(1 for r in RUTAS_MULTIPLES.values() if r)
+            print(f"✅ Multiruta: {rutas_encontradas}/4 rutas encontradas")
+        else:
+            # Modo normal: calcular solo la ruta seleccionada
+            print(f"🔍 Ejecutando A* con tipo_ruta={tipo_ruta.value}...")
+            RUTA_ASTAR = routing.a_estrella(
+                G_CUSTOM, PUNTO_ORIGEN, PUNTO_DESTINO,
+                w_dist=W_DIST, w_elev=W_ELEV, w_seg=W_SEG,
+                tipo_filtro=tipo_filtro,
+                tipo_ruta=tipo_ruta,
+                umbral_seguridad=umbral_seguridad,
+                umbral_pendiente=umbral_pendiente
+            )
+            print(f"✅ Ruta encontrada: {len(RUTA_ASTAR) if RUTA_ASTAR else 0} nodos")
+            
     except Exception as e:
         print(f"❌ Error en A*: {e}")
         import traceback
         traceback.print_exc()
 
-    # 3. Generación del Listado de Nodos
+    # 3. Generar resultados HTML
     ruta_nodos_html = []
     astar_encontrada = bool(RUTA_ASTAR)
+    
+    # Nombres para mostrar según tipo de ruta
+    nombres_rutas = {
+        'distancia': '📏 Distancia',
+        'peligrosidad': '🛡️ Seguridad',
+        'esfuerzo': '⛰️ Esfuerzo',
+        'balanceada': '⚖️ Balanceada'
+    }
 
-    if astar_encontrada:
-        ruta_nodos_html.append(html.B("Ruta A* (IDs):", className="d-block text-warning mt-3"))
-        astar_ids_str = ' → '.join(map(str, RUTA_ASTAR))
-        ruta_nodos_html.append(html.P(astar_ids_str, style={'wordBreak': 'break-all'}))
+    if mostrar_multiruta:
+        # Mostrar comparación de todas las rutas
+        ruta_nodos_html.append(html.H6("📊 Comparación de Rutas:", className="text-primary mt-2"))
+        
+        rutas_info = [
+            ('ruta_distancia', '📏 Distancia', 'blue'),
+            ('ruta_segura', '🛡️ Seguridad', 'green'),
+            ('ruta_esfuerzo', '⛰️ Esfuerzo', 'orange'),
+            ('ruta_balanceada', '⚖️ Balanceada', 'purple')
+        ]
+        
+        for key, nombre, color in rutas_info:
+            ruta = RUTAS_MULTIPLES.get(key)
+            if ruta:
+                # Calcular métricas de la ruta
+                metricas = routing.calcular_metricas_ruta(G_CUSTOM, ruta)
+                ruta_nodos_html.append(html.Div([
+                    html.B(f"{nombre}: ", style={'color': color}),
+                    html.Span(f"{len(ruta)} nodos, "),
+                    html.Span(f"{metricas['distancia_total']:.0f}m, "),
+                    html.Span(f"↑{metricas['ganancia_altura']:.0f}m, "),
+                    html.Span(f"⚠️{metricas['peligrosidad_promedio']:.2f}")
+                ], className="small mb-1"))
+            else:
+                ruta_nodos_html.append(html.Div([
+                    html.B(f"{nombre}: ", style={'color': color}),
+                    html.Span("No encontrada", className="text-muted")
+                ], className="small mb-1"))
     else:
-        ruta_nodos_html.append(html.P("A*: No se encontró camino.", className="text-muted"))
+        # Modo normal: mostrar solo la ruta principal
+        if astar_encontrada:
+            nombre_ruta = nombres_rutas.get(tipo_ruta_str, 'Ruta')
+            ruta_nodos_html.append(html.B(f"{nombre_ruta} (IDs):", className="d-block text-warning mt-3"))
+            astar_ids_str = ' → '.join(map(str, RUTA_ASTAR[:20]))  # Limitar a 20 para UI
+            if len(RUTA_ASTAR) > 20:
+                astar_ids_str += f' ... (+{len(RUTA_ASTAR)-20} más)'
+            ruta_nodos_html.append(html.P(astar_ids_str, style={'wordBreak': 'break-all', 'fontSize': '0.75rem'}))
+            
+            # Mostrar métricas
+            metricas = routing.calcular_metricas_ruta(G_CUSTOM, RUTA_ASTAR)
+            ruta_nodos_html.append(html.Div([
+                html.Span(f"📏 {metricas['distancia_total']:.0f}m | "),
+                html.Span(f"⛰️ +{metricas['ganancia_altura']:.0f}m | "),
+                html.Span(f"📐 máx {metricas['pendiente_maxima']:.1f}%")
+            ], className="small text-muted"))
+        else:
+            ruta_nodos_html.append(html.P("No se encontró camino con los filtros seleccionados.", className="text-muted"))
 
     # 4. Respuesta Final
-    if astar_encontrada:
-        a_len = len(RUTA_ASTAR)
-        mensaje = f"Ruta calculada con A*. {a_len} nodos. El mapa se ha actualizado."
+    if astar_encontrada or (mostrar_multiruta and any(RUTAS_MULTIPLES.values())):
+        if mostrar_multiruta:
+            rutas_ok = sum(1 for r in RUTAS_MULTIPLES.values() if r)
+            mensaje = f"✅ {rutas_ok} rutas calculadas. El mapa se ha actualizado."
+        else:
+            a_len = len(RUTA_ASTAR)
+            mensaje = f"✅ Ruta {nombres_rutas.get(tipo_ruta_str, '')} calculada. {a_len} nodos."
         msg = dbc.Alert(mensaje, color="success")
         return msg, html.Div(ruta_nodos_html)
     else:
-        return dbc.Alert("No se pudo encontrar ninguna ruta entre los puntos seleccionados.", color="danger"), None
+        return dbc.Alert("No se pudo encontrar ninguna ruta con los filtros seleccionados. Intente reducir restricciones.", color="danger"), None
 
 # ================= NUEVO CALLBACK PARA ACTUALIZAR AL MOVER ZOOM =================
 @app.callback(
