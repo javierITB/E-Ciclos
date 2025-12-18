@@ -1,1 +1,2 @@
 map_clean.osm filter=lfs diff=lfs merge=lfs -text
+edges_full.pkl filter=lfs diff=lfs merge=lfs -text

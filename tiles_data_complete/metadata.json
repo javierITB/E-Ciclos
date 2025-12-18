@@ -1,0 +1,14 @@
+{
+  "total_nodes": 244568,
+  "total_ways": 647981,
+  "total_edges": 1218553,
+  "oneway_edges": 77409,
+  "bounds": {
+    "minlat": -33.7509885,
+    "minlon": -70.9550929,
+    "maxlat": -33.1051223,
+    "maxlon": -70.1976561
+  },
+  "tile_size": 0.01,
+  "tiles_with_data": 1440
+}
